@@ -43,7 +43,7 @@ Use `localhost` or HTTPS for microphone access, wear headphones, and verify the 
 4. When a producer is content, use **Approve caller**. Only then will the caller appear in the show queue selector.
 5. In **Shows**, create a running order, add approved callers, check the custom soundboard and copy/open the broadcast link in OBS.
 6. In **Host Studio**, rehearse the mock route first: **Start show → Next caller → Answer call → Mock speak → End call**. Confirm the OBS Browser Source updates as you show and clear a visual.
-7. For a live headset rehearsal, use the same flow with `OPENAI_API_KEY` present, allow microphone access, select the intended microphone, wear headphones, and verify the caller meter, transcript, interrupt and end-call controls before treating the session as broadcast-ready.
+7. For a live headset rehearsal, open the Studio in Chrome or Edge at `http://localhost:3000` (or a deployed HTTPS URL) — not a normal HTTP LAN/IP address or an embedded preview. With `OPENAI_API_KEY` present, allow microphone access, select the intended microphone, wear headphones, and click **Answer call**. The caller gives a short opening automatically, then responds after each host turn. Verify the caller meter, transcript, interrupt and end-call controls before treating the session as broadcast-ready.
 
 The automated checks do not make a microphone, headphones, browser audio routing or OBS scene safe. Those are deliberately checked in the rehearsal above.
 

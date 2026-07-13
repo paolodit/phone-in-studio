@@ -4,6 +4,38 @@ import type { CallerSessionConfig, LiveVoiceProvider, LiveVoiceSession } from "@
 
 type RealtimeEvent = { type?: string; transcript?: string; delta?: string; error?: { message?: string }; name?: string; call_id?: string; arguments?: string };
 
+export function microphoneAccessIssue(input: { isSecureContext: boolean; hasGetUserMedia: boolean; origin?: string }) {
+  if (!input.isSecureContext) {
+    return `Live caller audio is blocked at ${input.origin ?? "this address"}. Open http://localhost:3000 on this computer, or use HTTPS. A normal HTTP LAN/IP address cannot access the microphone.`;
+  }
+  if (!input.hasGetUserMedia) {
+    return "This browser does not expose microphone access. Use Chrome or Edge on desktop, open the app on localhost or HTTPS, then allow microphone permission.";
+  }
+  return null;
+}
+
+function currentMicrophoneAccessIssue() {
+  return microphoneAccessIssue({
+    isSecureContext: window.isSecureContext,
+    hasGetUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
+    origin: window.location.origin,
+  });
+}
+
+async function getMicrophone(constraints: MediaTrackConstraints) {
+  const issue = currentMicrophoneAccessIssue();
+  if (issue) throw new Error(issue);
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: constraints });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "NotAllowedError" || name === "SecurityError") throw new Error("Microphone permission was blocked. Allow microphone access for this site, then click Answer Call again.");
+    if (name === "NotFoundError") throw new Error("No microphone was found. Connect or select a microphone, then click Answer Call again.");
+    if (name === "NotReadableError") throw new Error("The microphone is busy in another application. Close the other application and try again.");
+    throw error;
+  }
+}
+
 function level(analyser: AnalyserNode | undefined) {
   if (!analyser) return 0;
   const values = new Uint8Array(analyser.fftSize);
@@ -22,6 +54,8 @@ export async function listMicrophones() {
 export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
   async createSession(config: CallerSessionConfig): Promise<LiveVoiceSession> {
     config.onStatus?.("Requesting microphone permission…");
+    const microphoneIssue = currentMicrophoneAccessIssue();
+    if (microphoneIssue) throw new Error(microphoneIssue);
     const sessionResponse = await fetch("/api/realtime/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,7 +66,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
 
     const constraints: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     if (config.inputDeviceId) constraints.deviceId = { exact: config.inputDeviceId };
-    let microphone = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+    let microphone = await getMicrophone(constraints);
     const connection = new RTCPeerConnection();
     const output = new Audio();
     output.autoplay = true;
@@ -68,6 +102,14 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
 
     const send = (event: Record<string, unknown>) => {
       if (events.readyState === "open") events.send(JSON.stringify(event));
+    };
+    events.onopen = () => {
+      send({
+        type: "response.create",
+        response: {
+          instructions: "The host has just put you on air. Give one brief, natural opening that explains your surface problem, then stop and wait for the host's first question. Do not reveal hidden information.",
+        },
+      });
     };
     events.onmessage = (message) => {
       let event: RealtimeEvent;
@@ -108,7 +150,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     config.onStatus?.("Caller connected");
 
     const replaceInput = async (deviceId: string) => {
-      const next = await navigator.mediaDevices.getUserMedia({ audio: { ...constraints, deviceId: { exact: deviceId } } });
+      const next = await getMicrophone({ ...constraints, deviceId: { exact: deviceId } });
       const track = next.getAudioTracks()[0];
       await sender.replaceTrack(track);
       microphone.getTracks().forEach((oldTrack) => oldTrack.stop());
