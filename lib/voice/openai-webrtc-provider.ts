@@ -44,6 +44,19 @@ function level(analyser: AnalyserNode | undefined) {
   return Math.min(1, sum / values.length / 40);
 }
 
+function frequencyBands(analyser: AnalyserNode | undefined, count = 12) {
+  if (!analyser) return Array.from({ length: count }, () => 0);
+  const values = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(values);
+  return Array.from({ length: count }, (_, index) => {
+    const start = Math.floor((index / count) * values.length);
+    const end = Math.max(start + 1, Math.floor(((index + 1) / count) * values.length));
+    let total = 0;
+    for (let bucket = start; bucket < end; bucket += 1) total += values[bucket] ?? 0;
+    return Math.min(1, total / (end - start) / 180);
+  });
+}
+
 export async function listMicrophones() {
   if (!navigator.mediaDevices?.enumerateDevices) return [];
   return (await navigator.mediaDevices.enumerateDevices())
@@ -56,14 +69,6 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     config.onStatus?.("Requesting microphone permission…");
     const microphoneIssue = currentMicrophoneAccessIssue();
     if (microphoneIssue) throw new Error(microphoneIssue);
-    const sessionResponse = await fetch("/api/realtime/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ showId: config.showId, callerId: config.callerId }),
-    });
-    const sessionPayload = await sessionResponse.json() as { clientSecret?: string; model?: string; error?: string };
-    if (!sessionResponse.ok || !sessionPayload.clientSecret) throw new Error(sessionPayload.error ?? "Unable to create a Realtime session.");
-
     const constraints: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     if (config.inputDeviceId) constraints.deviceId = { exact: config.inputDeviceId };
     let microphone = await getMicrophone(constraints);
@@ -85,7 +90,12 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
 
     const measure = () => {
       if (ended) return;
-      config.onLevels?.({ input: level(inputAnalyser), output: level(outputAnalyser) });
+      config.onLevels?.({
+        input: level(inputAnalyser),
+        output: level(outputAnalyser),
+        inputBands: frequencyBands(inputAnalyser),
+        outputBands: frequencyBands(outputAnalyser),
+      });
       frame = requestAnimationFrame(measure);
     };
     frame = requestAnimationFrame(measure);
@@ -103,14 +113,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     const send = (event: Record<string, unknown>) => {
       if (events.readyState === "open") events.send(JSON.stringify(event));
     };
-    events.onopen = () => {
-      send({
-        type: "response.create",
-        response: {
-          instructions: "The host has just put you on air. Give one brief, natural opening that explains your surface problem, then stop and wait for the host's first question. Do not reveal hidden information.",
-        },
-      });
-    };
+    events.onopen = () => send({ type: "response.create" });
     events.onmessage = (message) => {
       let event: RealtimeEvent;
       try { event = JSON.parse(String(message.data)) as RealtimeEvent; } catch { return; }
@@ -138,15 +141,32 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
     config.onStatus?.("Connecting caller…");
-    const callRequest = new FormData();
-    callRequest.append("sdp", new Blob([offer.sdp ?? ""], { type: "application/sdp" }), "offer.sdp");
-    const answer = await fetch("https://api.openai.com/v1/realtime/calls", {
+    const answer = await fetch("/api/realtime/call", {
       method: "POST",
-      headers: { Authorization: `Bearer ${sessionPayload.clientSecret}` },
-      body: callRequest,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showId: config.showId, callerId: config.callerId, sdp: offer.sdp ?? "" }),
     });
-    if (!answer.ok) throw new Error("Realtime call negotiation failed. The session credential may have expired.");
-    await connection.setRemoteDescription({ type: "answer", sdp: await answer.text() });
+    const answerPayload = await answer.json().catch(() => null) as { sdp?: string; error?: string } | null;
+    const closeFailedAttempt = async () => {
+      ended = true;
+      cancelAnimationFrame(frame);
+      microphone.getTracks().forEach((track) => track.stop());
+      output.pause();
+      output.srcObject = null;
+      events.close();
+      connection.close();
+      await audioContext.close();
+    };
+    if (!answer.ok || !answerPayload?.sdp) {
+      await closeFailedAttempt();
+      throw new Error(answerPayload?.error ?? "The live caller could not connect. Try Connect AI caller again.");
+    }
+    try {
+      await connection.setRemoteDescription({ type: "answer", sdp: answerPayload.sdp });
+    } catch (error) {
+      await closeFailedAttempt();
+      throw error;
+    }
     config.onStatus?.("Caller connected");
 
     const replaceInput = async (deviceId: string) => {

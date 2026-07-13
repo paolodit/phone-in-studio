@@ -32,7 +32,7 @@ export function callerStructuredData(input: CallerFormInput) {
     performance: {
       voiceId: input.voiceId,
       voiceInstructions: input.speechStyle,
-      pacing: "Conversational",
+      pacing: input.pacing ?? "Conversational",
       averageResponseLength: "One to three sentences",
       interruptionBehaviour: "Stop immediately, acknowledge the interruption, then answer the new question.",
       emotionalRange: "Controlled annoyance through to defensive indignation.",

@@ -18,6 +18,7 @@ export function CallerEditor({ action, caller, submitLabel }: {
   const performance = object(caller?.performance);
   const hostSupport = object(caller?.hostSupport);
   const portrait = caller?.assets?.find((asset) => asset.type === "PORTRAIT")?.url ?? "";
+  const selectedVoice = ({ "mock-warm-welsh": "coral", "mock-dry-welsh": "cedar", "mock-confident-welsh": "shimmer", "mock-gravel-welsh": "echo", "mock-keen-welsh": "ash" } as Record<string, string>)[string(performance.voiceId)] ?? string(performance.voiceId, "coral");
   return (
     <form action={action} className="space-y-6">
       <section className="panel panel-pad"><h2 className="font-bold text-white">Public identity</h2><div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -39,7 +40,8 @@ export function CallerEditor({ action, caller, submitLabel }: {
         <label><span className="label">Actual behaviour</span><textarea className="field min-h-20" name="actualBehaviour" defaultValue={string(character.actualBehaviour)} required /></label>
         <label><span className="label">Comic contradiction</span><textarea className="field min-h-20" name="comicContradiction" defaultValue={string(character.comicContradiction)} required /></label>
         <label><span className="label">Speech style</span><textarea className="field min-h-20" name="speechStyle" defaultValue={string(character.speechStyle)} required /></label>
-        <label><span className="label">Selected voice</span><input className="field" name="voiceId" defaultValue={string(performance.voiceId, "mock-warm-voice")} required /></label>
+        <label><span className="label">Selected voice</span><select className="field" name="voiceId" defaultValue={selectedVoice} required><option value="alloy">Alloy — neutral</option><option value="ash">Ash — lively</option><option value="ballad">Ballad — rounded</option><option value="coral">Coral — warm</option><option value="cedar">Cedar — dry</option><option value="echo">Echo — low-key</option><option value="marin">Marin — balanced</option><option value="sage">Sage — composed</option><option value="shimmer">Shimmer — bright</option><option value="verse">Verse — expressive</option></select></label>
+        <label><span className="label">Delivery pace</span><select className="field" name="pacing" defaultValue={string(performance.pacing, "Conversational")}><option>Measured</option><option>Conversational</option><option>Brisk</option><option>Animated</option></select></label>
         <label className="md:col-span-2"><span className="label">Hidden truth</span><textarea className="field min-h-20" name="hiddenTruth" defaultValue={string(story.hiddenTruth)} required /></label>
         <label><span className="label">Escalation beats (one per line)</span><textarea className="field min-h-28" name="escalationBeats" defaultValue={lines(story.escalationBeats)} required /></label>
         <label><span className="label">Suggested host questions (one per line)</span><textarea className="field min-h-28" name="suggestedQuestions" defaultValue={lines(hostSupport.suggestedQuestions)} required /></label>

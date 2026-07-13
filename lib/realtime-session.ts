@@ -3,13 +3,29 @@ import type { Caller, CallerAsset } from "@/generated/prisma/client";
 import { buildCallerInstructions } from "@/lib/prompt";
 
 const supportedVoices = new Set(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
+const legacyVoiceAliases: Record<string, string> = {
+  "mock-warm-welsh": "coral",
+  "mock-dry-welsh": "cedar",
+  "mock-confident-welsh": "shimmer",
+  "mock-gravel-welsh": "echo",
+  "mock-keen-welsh": "ash",
+};
 
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function safeVoice(value: unknown) {
-  return typeof value === "string" && supportedVoices.has(value) ? value : "marin";
+  if (typeof value !== "string") return "marin";
+  const voice = legacyVoiceAliases[value] ?? value;
+  return supportedVoices.has(voice) ? voice : "marin";
+}
+
+function speechSpeed(value: unknown) {
+  const pacing = typeof value === "string" ? value.toLowerCase() : "";
+  if (/(measured|thoughtful|slow|deliberate)/.test(pacing)) return 0.88;
+  if (/(brisk|quick|fast|energetic|animated)/.test(pacing)) return 1.1;
+  return 1;
 }
 
 export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAsset[] }) {
@@ -79,7 +95,7 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
         turn_detection: { type: "server_vad", create_response: true, interrupt_response: true, prefix_padding_ms: 300, silence_duration_ms: 450 },
       },
-      output: { voice: safeVoice(performance.voiceId), speed: 1 },
+      output: { voice: safeVoice(performance.voiceId), speed: speechSpeed(performance.pacing) },
     },
     max_output_tokens: 180,
     tools: visualTool,

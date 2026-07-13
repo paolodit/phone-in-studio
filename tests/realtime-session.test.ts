@@ -18,4 +18,15 @@ describe("Realtime caller session configuration", () => {
     expect(config.instructions).toContain("Stop output immediately");
     expect(JSON.stringify(config)).not.toContain("OPENAI_API_KEY");
   });
+
+  it("maps legacy seeded voice labels to distinct supported voices and honours pace", () => {
+    const caller = {
+      id: "caller-2", firstName: "Gareth", surnameInitial: "D", age: null, location: "Neath", occupation: null, relationshipStatus: null,
+      issueHeadline: "A seagull knows my lunch break", openingSummary: "A seagull waits near the van.", status: "APPROVED",
+      character: {}, story: {}, performance: { voiceId: "mock-dry-welsh", pacing: "Brisk" }, hostSupport: {}, generation: null, quality: null, rehearsalCount: 0, producerNotes: null, approvedAt: null, approvedBy: null, createdAt: new Date(), updatedAt: new Date(),
+    } as unknown as Caller;
+    const config = buildRealtimeSessionConfig(caller);
+    expect(config.audio.output.voice).toBe("cedar");
+    expect(config.audio.output.speed).toBe(1.1);
+  });
 });

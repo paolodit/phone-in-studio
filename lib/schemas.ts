@@ -20,6 +20,7 @@ export const callerFormSchema = z.object({
   escalationBeats: z.string().trim().min(3).max(2_000),
   suggestedQuestions: z.string().trim().min(3).max(2_000),
   voiceId: z.string().trim().min(1).max(120),
+  pacing: z.enum(["Measured", "Conversational", "Brisk", "Animated"]).optional(),
   portraitUrl: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
 });
 
@@ -62,7 +63,7 @@ export const generatedCallerDraftSchema = z.object({
   hiddenTruth: z.string().trim().min(3).max(1_000),
   escalationBeats: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
   suggestedQuestions: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
-  voiceId: z.literal("marin"),
+  voiceId: z.enum(["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"]),
   originalityNotes: z.string().trim().min(8).max(500),
   producerReviewNotes: z.array(z.string().trim().min(3).max(500)).min(1).max(5),
 });
@@ -96,6 +97,7 @@ export const queueControlSchema = z.object({
     "HOLD_CALLER",
     "RESUME_CALLER",
     "END_CALL",
+    "CALLER_HANGS_UP",
     "SKIP_CALLER",
     "EMERGENCY_STOP",
     "END_SHOW",
@@ -104,9 +106,17 @@ export const queueControlSchema = z.object({
 
 export type StudioControlAction = z.infer<typeof queueControlSchema>["action"];
 
+export const queueReorderSchema = z.object({
+  queueItemIds: z.array(z.string().min(1)).min(1).max(200).refine((ids) => new Set(ids).size === ids.length, "Caller IDs must be unique."),
+});
+
 export const realtimeSessionRequestSchema = z.object({
   showId: z.string().min(1),
   callerId: z.string().min(1),
+});
+
+export const realtimeCallRequestSchema = realtimeSessionRequestSchema.extend({
+  sdp: z.string().min(1).max(1_000_000),
 });
 
 export const transcriptEntrySchema = z.object({

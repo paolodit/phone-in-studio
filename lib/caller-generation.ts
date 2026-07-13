@@ -45,7 +45,7 @@ const callerDraftJsonSchema: JsonSchema = {
     speechStyle: { type: "string" }, hiddenTruth: { type: "string" },
     escalationBeats: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
     suggestedQuestions: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
-    voiceId: { type: "string", enum: ["marin"] },
+    voiceId: { type: "string", enum: ["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"] },
     originalityNotes: { type: "string" }, producerReviewNotes: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
   },
   required: [
@@ -152,7 +152,7 @@ export async function developCallerFromPremise(sourceNotes: string, premise: Cal
       "Turn the producer's seed and selected premise into one internally consistent caller card. It is a private production draft, never an approved or live caller.",
       "The caller must be wholly fictional and adult. Do not use real people, brands, existing fictional characters, performer styles, protected characteristics as punchlines, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
       "Use a mundane, reversible problem. Make the public summary playable, the hidden truth specific, and the host questions fair rather than cruel.",
-      "Use \"marin\" for voiceId. The producer review notes must identify checks a human should make before approval, including originality and tone.",
+      "Choose one suitable voiceId from the allowed options. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
     ].join(" "),
     input: `Producer seed notes:\n${input.sourceNotes}\n\nSelected premise:\n${JSON.stringify(selectedPremise)}`,
     validate: (value) => generatedCallerDraftSchema.parse(value),

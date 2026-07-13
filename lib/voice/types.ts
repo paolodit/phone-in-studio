@@ -5,7 +5,7 @@ export type CallerSessionConfig = {
   voiceId: string;
   inputDeviceId?: string;
   onTranscript?: (entry: { speaker: "HOST" | "CALLER"; text: string }) => void;
-  onLevels?: (levels: { input: number; output: number }) => void;
+  onLevels?: (levels: { input: number; output: number; inputBands: number[]; outputBands: number[] }) => void;
   onStatus?: (status: string) => void;
   onError?: (message: string) => void;
   onVisualTrigger?: (assetId: string) => Promise<void>;

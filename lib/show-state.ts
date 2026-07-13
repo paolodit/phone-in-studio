@@ -52,6 +52,9 @@ export function transitionShow(state: MachineState, action: StudioControlAction,
     case "END_CALL":
       if (!["CALLER_INCOMING", "CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(state.broadcastState)) return invalid(action, state);
       return { showStatus: "LIVE", broadcastState: "CALLER_ENDED", eventType: "CALL_ENDED" };
+    case "CALLER_HANGS_UP":
+      if (!["CALLER_INCOMING", "CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(state.broadcastState)) return invalid(action, state);
+      return { showStatus: "LIVE", broadcastState: "CALLER_ENDED", eventType: "CALL_ENDED" };
     case "SKIP_CALLER":
       if (!["CALLER_INCOMING", "CALLER_CONNECTING"].includes(state.broadcastState)) return invalid(action, state);
       return { showStatus: "LIVE", broadcastState: "SHOW_IDLE", eventType: "CALL_ENDED" };

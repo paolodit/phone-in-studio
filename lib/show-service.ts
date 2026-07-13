@@ -72,7 +72,7 @@ export async function applyShowControl(showId: string, action: StudioControlActi
     if (action === "MOCK_CONNECT" && current) {
       await tx.queueItem.update({ where: { id: current.id }, data: { status: "LIVE", startedAt: current.startedAt ?? now } });
     }
-    if (action === "END_CALL" && current) {
+    if (["END_CALL", "CALLER_HANGS_UP"].includes(action) && current) {
       await tx.queueItem.update({ where: { id: current.id }, data: { status: "COMPLETED", endedAt: now } });
     }
     if (action === "SKIP_CALLER" && current) {
@@ -109,6 +109,24 @@ export async function applyShowControl(showId: string, action: StudioControlActi
   const snapshot = await getBroadcastSnapshot(showId);
   publishShowUpdate(showId, snapshot);
   return snapshot;
+}
+
+export async function reorderShowQueue(showId: string, queueItemIds: string[]) {
+  await prisma.$transaction(async (tx) => {
+    const items = await tx.queueItem.findMany({ where: { showId }, orderBy: { position: "asc" }, select: { id: true, position: true } });
+    if (items.length !== queueItemIds.length) throw new Error("The running order changed. Refresh and try again.");
+    const knownIds = new Set(items.map((item) => item.id));
+    if (queueItemIds.some((id) => !knownIds.has(id))) throw new Error("The caller order contains an item from another show.");
+
+    const offset = Math.max(...items.map((item) => item.position), 0) + items.length + 1;
+    await tx.queueItem.updateMany({ where: { showId }, data: { position: { increment: offset } } });
+    for (const [index, id] of queueItemIds.entries()) {
+      await tx.queueItem.update({ where: { id }, data: { position: index + 1 } });
+    }
+    await tx.showEvent.create({ data: { showId, type: "QUEUE_REORDERED", payload: { queueItemIds } as Prisma.InputJsonValue } });
+  });
+
+  publishShowUpdate(showId, await getBroadcastSnapshot(showId));
 }
 
 export async function applyBroadcastVisual(showId: string, assetId: string | null) {

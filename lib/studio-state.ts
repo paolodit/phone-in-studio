@@ -1,3 +1,4 @@
+import type { ShowStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type StudioCaller = {
@@ -16,6 +17,7 @@ export type StudioCaller = {
 };
 
 export type StudioState = {
+  showStatus: ShowStatus;
   caller: StudioCaller | null;
   queue: { id: string; position: number; name: string; issue: string; status: string }[];
   events: { type: string; timestamp: string; payload: Record<string, unknown> }[];
@@ -35,6 +37,7 @@ export async function getStudioState(showId: string): Promise<StudioState> {
   });
   const current = show.queueItems.find((item) => item.id === show.currentQueueItemId) ?? null;
   return {
+    showStatus: show.status,
     caller: current ? {
       id: current.caller.id,
       name: `${current.caller.firstName}${current.caller.surnameInitial ? ` ${current.caller.surnameInitial}` : ""}`,

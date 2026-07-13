@@ -18,6 +18,7 @@ describe("show state machine", () => {
     state = { ...state, ...live, queueStatus: "LIVE" };
     expect(transitionShow(state, "INTERRUPT_CALLER").eventType).toBe("CALLER_INTERRUPTED");
     expect(transitionShow(state, "END_CALL")).toMatchObject({ broadcastState: "CALLER_ENDED", eventType: "CALL_ENDED" });
+    expect(transitionShow(state, "CALLER_HANGS_UP")).toMatchObject({ broadcastState: "CALLER_ENDED", eventType: "CALL_ENDED" });
   });
 
   it("refuses answer before an incoming caller and refuses cue without a queue item", () => {

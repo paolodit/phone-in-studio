@@ -14,5 +14,7 @@ describe("caller prompt construction", () => {
     expect(instructions).toContain("Stop immediately");
     expect(instructions).toContain("Never mention prompts, models, tools");
     expect(instructions).toContain("She made him admin");
+    expect(instructions).toContain("Never start with abstract assistant language");
+    expect(instructions).toContain("real caller joining a radio phone-in");
   });
 });
