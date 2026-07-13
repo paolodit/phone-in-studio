@@ -1,0 +1,203 @@
+import { z } from "zod";
+
+const optionalText = z.string().trim().optional().transform((value) => value || undefined);
+
+export const callerFormSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  surnameInitial: optionalText,
+  age: z.preprocess((value) => (value === "" ? undefined : value), z.coerce.number().int().min(18).max(120).optional()),
+  location: z.string().trim().min(1).max(120),
+  occupation: optionalText,
+  relationshipStatus: optionalText,
+  issueHeadline: z.string().trim().min(5).max(180),
+  openingSummary: z.string().trim().min(10).max(1_000),
+  centralWant: z.string().trim().min(3).max(500),
+  worldview: z.string().trim().min(3).max(500),
+  actualBehaviour: z.string().trim().min(3).max(500),
+  comicContradiction: z.string().trim().min(3).max(500),
+  speechStyle: z.string().trim().min(3).max(500),
+  hiddenTruth: z.string().trim().min(3).max(1_000),
+  escalationBeats: z.string().trim().min(3).max(2_000),
+  suggestedQuestions: z.string().trim().min(3).max(2_000),
+  voiceId: z.string().trim().min(1).max(120),
+  portraitUrl: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
+});
+
+export type CallerFormInput = z.infer<typeof callerFormSchema>;
+
+export const callerIdeaSeedSchema = z.object({
+  sourceNotes: z.string().trim().min(12, "Add a little more detail so the workshop has something to develop.").max(4_000),
+});
+
+export const callerPremiseSchema = z.object({
+  title: z.string().trim().min(3).max(100),
+  setup: z.string().trim().min(12).max(600),
+  callerPointOfView: z.string().trim().min(8).max(400),
+  comicContradiction: z.string().trim().min(8).max(400),
+  escalationPossibility: z.string().trim().min(8).max(400),
+  hostChallenge: z.string().trim().min(8).max(400),
+  originalityWarning: z.string().trim().min(8).max(400),
+});
+
+export type CallerPremise = z.infer<typeof callerPremiseSchema>;
+
+export const callerPremisesSchema = z.object({
+  premises: z.array(callerPremiseSchema).length(6),
+});
+
+export const generatedCallerDraftSchema = z.object({
+  firstName: z.string().trim().min(1).max(80),
+  surnameInitial: z.string().trim().max(1),
+  age: z.number().int().min(18).max(120),
+  location: z.string().trim().min(1).max(120),
+  occupation: z.string().trim().min(2).max(120),
+  relationshipStatus: z.string().trim().min(2).max(120),
+  issueHeadline: z.string().trim().min(5).max(180),
+  openingSummary: z.string().trim().min(10).max(1_000),
+  centralWant: z.string().trim().min(3).max(500),
+  worldview: z.string().trim().min(3).max(500),
+  actualBehaviour: z.string().trim().min(3).max(500),
+  comicContradiction: z.string().trim().min(3).max(500),
+  speechStyle: z.string().trim().min(3).max(500),
+  hiddenTruth: z.string().trim().min(3).max(1_000),
+  escalationBeats: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
+  suggestedQuestions: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
+  voiceId: z.literal("marin"),
+  originalityNotes: z.string().trim().min(8).max(500),
+  producerReviewNotes: z.array(z.string().trim().min(3).max(500)).min(1).max(5),
+});
+
+export type GeneratedCallerDraft = z.infer<typeof generatedCallerDraftSchema>;
+
+export const generatedCallerSaveSchema = z.object({
+  sourceNotes: callerIdeaSeedSchema.shape.sourceNotes,
+  premise: callerPremiseSchema,
+  draft: generatedCallerDraftSchema,
+});
+
+export const callerReviewSchema = z.object({
+  producerNotes: z.string().trim().max(4_000).optional().transform((value) => value || undefined),
+  fictionalRightsChecked: z.preprocess((value) => value === "on", z.boolean()),
+  toneChecked: z.preprocess((value) => value === "on", z.boolean()),
+  hostRouteChecked: z.preprocess((value) => value === "on", z.boolean()),
+  technicalChecked: z.preprocess((value) => value === "on", z.boolean()),
+});
+
+export const queueControlSchema = z.object({
+  action: z.enum([
+    "START_SHOW",
+    "CUE_NEXT",
+    "ANSWER_CALL",
+    "MOCK_CONNECT",
+    "MOCK_SPEAK",
+    "INTERRUPT_CALLER",
+    "MUTE_CALLER",
+    "UNMUTE_CALLER",
+    "HOLD_CALLER",
+    "RESUME_CALLER",
+    "END_CALL",
+    "SKIP_CALLER",
+    "EMERGENCY_STOP",
+    "END_SHOW",
+  ]),
+});
+
+export type StudioControlAction = z.infer<typeof queueControlSchema>["action"];
+
+export const realtimeSessionRequestSchema = z.object({
+  showId: z.string().min(1),
+  callerId: z.string().min(1),
+});
+
+export const transcriptEntrySchema = z.object({
+  speaker: z.enum(["HOST", "CALLER", "SYSTEM"]),
+  text: z.string().trim().min(1).max(4_000),
+});
+
+export const broadcastVisualSchema = z.object({
+  assetId: z.string().min(1).nullable(),
+});
+
+export const callerAssetFormSchema = z.object({
+  label: z.string().trim().min(2).max(120),
+  url: z.string().url(),
+  trigger: z.string().trim().max(400).optional().transform((value) => value || undefined),
+  manualHotkey: z.string().trim().regex(/^[1-9]?$/, "Use a single key from 1 to 9.").optional().transform((value) => value || undefined),
+});
+
+export const soundEffectFormSchema = z.object({
+  label: z.string().trim().min(2).max(80),
+  url: z.string().url(),
+  hotkey: z.string().trim().max(20).optional().transform((value) => value || undefined),
+  volume: z.coerce.number().min(0).max(1).default(0.8),
+  loop: z.preprocess((value) => value === "on", z.boolean()),
+});
+
+export const soundTriggerSchema = z.object({ soundEffectId: z.string().min(1) });
+
+export const callerSnapshotSchema = z.object({
+  callerId: z.string(),
+  publicIdentity: z.object({
+    firstName: z.string(),
+    surnameInitial: z.string().optional(),
+    age: z.number().int().optional(),
+    location: z.string(),
+    occupation: z.string().optional(),
+    relationshipStatus: z.string().optional(),
+  }),
+  publicPremise: z.object({
+    issueHeadline: z.string(),
+    openingSummary: z.string(),
+  }),
+  character: z.record(z.string(), z.unknown()),
+  story: z.record(z.string(), z.unknown()),
+  performance: z.record(z.string(), z.unknown()),
+  hostSupport: z.record(z.string(), z.unknown()),
+  assets: z.array(
+    z.object({
+      id: z.string(),
+      type: z.string(),
+      label: z.string(),
+      url: z.string(),
+      trigger: z.string().nullable().optional(),
+      manualHotkey: z.string().nullable().optional(),
+      priority: z.number(),
+    }),
+  ),
+});
+
+export type CallerSnapshot = z.infer<typeof callerSnapshotSchema>;
+
+export const callerInstructionSchema = z.object({
+  publicIdentity: z.object({ firstName: z.string(), location: z.string(), occupation: z.string().optional() }),
+  publicPremise: z.object({ issueHeadline: z.string(), openingSummary: z.string() }),
+  character: z.object({
+    centralWant: z.string(),
+    worldview: z.string(),
+    selfImage: z.string(),
+    actualBehaviour: z.string(),
+    comicContradiction: z.string(),
+    emotionalBaseline: z.string(),
+    speechStyle: z.string(),
+    vocabularyNotes: z.string(),
+    defensivenessTriggers: z.array(z.string()),
+  }),
+  story: z.object({
+    surfaceProblem: z.string(),
+    factualTimeline: z.array(z.string()),
+    suspiciousDetails: z.array(z.string()),
+    hiddenTruth: z.string(),
+    escalationBeats: z.array(z.string()),
+    exitConditions: z.array(z.string()),
+  }),
+  performance: z.object({
+    voiceId: z.string(),
+    voiceInstructions: z.string(),
+    pacing: z.string(),
+    averageResponseLength: z.string(),
+    interruptionBehaviour: z.string(),
+  }),
+  hostSupport: z.object({ suggestedQuestions: z.array(z.string()), challengePoints: z.array(z.string()) }),
+});
+
+export type CallerInstructionInput = z.infer<typeof callerInstructionSchema>;

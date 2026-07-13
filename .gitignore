@@ -1,0 +1,10 @@
+node_modules
+.next
+.pglite
+generated
+.env
+.env.local
+coverage
+*.log
+prisma/dev.db
+tsconfig.tsbuildinfo

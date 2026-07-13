@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  PRODUCER
+  HOST
+}
+
+enum CallerStatus {
+  DRAFT
+  DEVELOPING
+  REHEARSING
+  APPROVED
+  QUEUED
+  LIVE
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum ShowStatus {
+  DRAFT
+  READY
+  LIVE
+  ENDED
+}
+
+enum QueueItemStatus {
+  QUEUED
+  CONNECTING
+  LIVE
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum BroadcastState {
+  SHOW_IDLE
+  CALLER_INCOMING
+  CALLER_CONNECTING
+  CALLER_LIVE
+  CALLER_ON_HOLD
+  CALLER_ENDED
+  SHOW_BREAK
+  SHOW_ENDED
+  ERROR_SAFE
+}
+
+enum ShowEventType {
+  SHOW_STARTED
+  CALLER_INCOMING
+  CALLER_CONNECTING
+  CALLER_CONNECTED
+  TRANSCRIPT_RECORDED
+  VOICE_SESSION_ERROR
+  CALLER_SPEAKING_STARTED
+  CALLER_SPEAKING_STOPPED
+  CALLER_INTERRUPTED
+  CALLER_MUTED
+  CALLER_UNMUTED
+  CALLER_HELD
+  CALLER_RESUMED
+  VISUAL_SHOWN
+  VISUAL_CLEARED
+  SOUND_EFFECT_PLAYED
+  CALL_ENDED
+  CALL_FAILED
+  QUEUE_REORDERED
+  SHOW_ENDED
+  EMERGENCY_STOP
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Caller {
+  id             String       @id @default(cuid())
+  status         CallerStatus @default(DRAFT)
+  firstName      String
+  surnameInitial String?
+  age            Int?
+  location       String
+  occupation     String?
+  relationshipStatus String?
+  issueHeadline  String
+  openingSummary String
+  character      Json
+  story          Json
+  performance    Json
+  hostSupport    Json
+  generation     Json?
+  quality        Json?
+  rehearsalCount Int          @default(0)
+  producerNotes  String?
+  approvedAt     DateTime?
+  approvedBy     String?
+  assets         CallerAsset[]
+  queueItems     QueueItem[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status])
+}
+
+model CallerAsset {
+  id               String   @id @default(cuid())
+  callerId         String
+  type             String   @default("SUPPORTING_VISUAL")
+  label            String
+  url              String
+  trigger          String?
+  manualHotkey     String?
+  autoTriggerKeywords String[] @default([])
+  priority         Int      @default(0)
+  durationSeconds  Int?
+  transition       String   @default("CUT")
+  broadcastRegion  String   @default("MAIN")
+  createdAt        DateTime @default(now())
+  caller           Caller   @relation(fields: [callerId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+}
+
+model Show {
+  id                 String         @id @default(cuid())
+  title              String
+  status             ShowStatus     @default(DRAFT)
+  brandingConfig     Json
+  broadcastToken     String         @unique @default(cuid())
+  broadcastPublic    Boolean        @default(false)
+  currentQueueItemId String?
+  currentVisualAssetId String?
+  broadcastState     BroadcastState @default(SHOW_IDLE)
+  startedAt          DateTime?
+  endedAt            DateTime?
+  queueItems         QueueItem[]
+  events             ShowEvent[]
+  soundEffects       SoundEffect[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([status])
+}
+
+model SoundEffect {
+  id        String   @id @default(cuid())
+  showId    String
+  label     String
+  url       String
+  hotkey    String?
+  volume    Float    @default(0.8)
+  loop      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  show      Show     @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([showId])
+}
+
+model QueueItem {
+  id             String          @id @default(cuid())
+  showId         String
+  callerId       String
+  position       Int
+  status         QueueItemStatus @default(QUEUED)
+  callerSnapshot Json
+  producerNote   String?
+  isReserve      Boolean         @default(false)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  show           Show            @relation(fields: [showId], references: [id], onDelete: Cascade)
+  caller         Caller          @relation(fields: [callerId], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([showId, position])
+  @@index([showId, status])
+}
+
+model ShowEvent {
+  id        String        @id @default(cuid())
+  showId    String
+  type      ShowEventType
+  timestamp DateTime      @default(now())
+  payload   Json
+  show      Show          @relation(fields: [showId], references: [id], onDelete: Cascade)
+
+  @@index([showId, timestamp])
+}
