@@ -3,25 +3,25 @@
 import { Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createCallerSnapshot } from "@/lib/caller";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { soundEffectFormSchema } from "@/lib/schemas";
-import { resetShowForReplay } from "@/lib/show-service";
+import { showSetupSchema, soundEffectFormSchema } from "@/lib/schemas";
+import { buildShowFormatConfig } from "@/lib/show-format";
+import { queueApprovedCaller, resetShowForReplay } from "@/lib/show-service";
 
 export async function createShowAction(formData: FormData) {
   await requireAdmin();
   const title = String(formData.get("title") ?? "").trim();
   if (title.length < 3 || title.length > 120) throw new Error("Show title must be between 3 and 120 characters.");
-  const show = await prisma.show.create({ data: { title, brandingConfig: { programmeName: title } as Prisma.InputJsonValue } });
+  const show = await prisma.show.create({ data: { title, brandingConfig: buildShowFormatConfig({ title }) as Prisma.InputJsonValue } });
   redirect(`/shows/${show.id}`);
 }
 
 export async function updateShowAction(showId: string, formData: FormData) {
   await requireAdmin();
-  const title = String(formData.get("title") ?? "").trim();
-  if (title.length < 3 || title.length > 120) throw new Error("Show title must be between 3 and 120 characters.");
-  await prisma.show.update({ where: { id: showId }, data: { title, brandingConfig: { programmeName: title } as Prisma.InputJsonValue } });
+  const input = showSetupSchema.parse(Object.fromEntries(formData.entries()));
+  const current = await prisma.show.findUniqueOrThrow({ where: { id: showId }, select: { brandingConfig: true } });
+  await prisma.show.update({ where: { id: showId }, data: { title: input.title, brandingConfig: buildShowFormatConfig(input, current.brandingConfig) as Prisma.InputJsonValue } });
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/shows");
   revalidatePath("/studio");
@@ -66,19 +66,7 @@ export async function deleteSoundEffectAction(showId: string, soundEffectId: str
 export async function addCallerToShowAction(showId: string, formData: FormData) {
   await requireAdmin();
   const callerId = String(formData.get("callerId") ?? "");
-  const [caller, last] = await Promise.all([
-    prisma.caller.findUniqueOrThrow({ where: { id: callerId }, include: { assets: true } }),
-    prisma.queueItem.findFirst({ where: { showId }, orderBy: { position: "desc" }, select: { position: true } }),
-  ]);
-  if (caller.status !== "APPROVED") throw new Error("Only manually approved callers may enter the live queue.");
-  await prisma.queueItem.create({
-    data: {
-      showId,
-      callerId,
-      position: (last?.position ?? 0) + 1,
-      callerSnapshot: createCallerSnapshot(caller) as Prisma.InputJsonValue,
-    },
-  });
+  await queueApprovedCaller(showId, callerId);
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/studio");
 }

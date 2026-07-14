@@ -25,7 +25,7 @@ export async function searchStockImages(query: string, requested: StockImageProv
   const provider = configuredProvider(requested);
   if (!provider) {
     const required = requested === "auto" ? "PEXELS_API_KEY or PIXABAY_API_KEY" : requested === "pexels" ? "PEXELS_API_KEY" : "PIXABAY_API_KEY";
-    throw new Error(`Add ${required} to local.env, then restart the development server to search stock images.`);
+    throw new Error(`Add ${required} to .env.local, then restart the development server to search stock images.`);
   }
 
   if (provider === "pexels") {

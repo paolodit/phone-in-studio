@@ -23,7 +23,7 @@ async function main() {
 
   const callers = [];
   for (const fixture of fixtures) {
-    const input: CallerFormInput = { ...fixture, age: undefined, relationshipStatus: undefined, portraitUrl: fixture.portrait };
+    const input: CallerFormInput = { ...fixture, age: undefined, relationshipStatus: undefined, topicTags: "", portraitUrl: fixture.portrait };
     const structured = callerStructuredData(input);
     const caller = await prisma.caller.create({
       data: {
@@ -33,9 +33,6 @@ async function main() {
         quality: { overall: 0, manuallyApproved: true } as Prisma.InputJsonValue,
         assets: { create: [
           { type: "PORTRAIT", label: `${fixture.firstName} portrait`, url: fixture.portrait },
-          { type: "SUPPORTING_VISUAL", label: "The suspicious receipt", url: "/visuals/placeholder.svg", manualHotkey: "1", trigger: "Manual visual test", priority: 1 },
-          { type: "SUPPORTING_VISUAL", label: "A highly specific diagram", url: "/visuals/placeholder.svg", manualHotkey: "2", trigger: "Manual visual test", priority: 2 },
-          { type: "SUPPORTING_VISUAL", label: "The final reveal", url: "/visuals/placeholder.svg", manualHotkey: "3", trigger: "Manual visual test", priority: 3 },
         ] },
       }, include: { assets: true },
     });

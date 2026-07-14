@@ -4,6 +4,7 @@ import { isAdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildRealtimeSessionConfig } from "@/lib/realtime-session";
 import { realtimeCallRequestSchema } from "@/lib/schemas";
+import { readShowFormatConfig } from "@/lib/show-format";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Realtime is not configured. Add OPENAI_API_KEY, then restart the local server." }, { status: 503 });
 
-  const show = await prisma.show.findUniqueOrThrow({ where: { id: input.showId }, select: { currentQueueItemId: true } });
+  const show = await prisma.show.findUniqueOrThrow({ where: { id: input.showId }, select: { currentQueueItemId: true, title: true, brandingConfig: true } });
   const current = show.currentQueueItemId
     ? await prisma.queueItem.findUnique({ where: { id: show.currentQueueItemId }, include: { caller: { include: { assets: true } } } })
     : null;
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
 
   const body = new FormData();
   body.set("sdp", input.sdp);
-  body.set("session", JSON.stringify({ type: "realtime", ...buildRealtimeSessionConfig(current.caller) }));
+  body.set("session", JSON.stringify({ type: "realtime", ...buildRealtimeSessionConfig(current.caller, readShowFormatConfig(show.brandingConfig, show.title)) }));
   const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     headers: {

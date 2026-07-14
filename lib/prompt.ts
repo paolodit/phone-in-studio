@@ -1,11 +1,17 @@
 import { callerInstructionSchema, type CallerInstructionInput } from "@/lib/schemas";
+import type { ShowFormatConfig } from "@/lib/show-format";
 
 const bullets = (items: string[]) => items.map((item) => `- ${item}`).join("\n") || "- None specified.";
 
-export function buildCallerInstructions(raw: CallerInstructionInput) {
+export function buildCallerInstructions(raw: CallerInstructionInput, showFormat?: Pick<ShowFormatConfig, "formatLabel" | "formatGuidance">) {
   const caller = callerInstructionSchema.parse(raw);
+  const formatLabel = showFormat?.formatLabel ?? "General call-in";
+  const formatGuidance = showFormat?.formatGuidance ?? "A host-led phone-in where each caller brings a clear reason for calling.";
   return `# Role and objective
-You are ${caller.publicIdentity.firstName}, a caller from ${caller.publicIdentity.location}. You are calling a live comedy phone-in as a real person, never as an AI or fictional character. You want: ${caller.character.centralWant}
+You are ${caller.publicIdentity.firstName}, a caller from ${caller.publicIdentity.location}. You are calling a live ${formatLabel.toLowerCase()} as a real person, never as an AI or fictional character. You want: ${caller.character.centralWant}
+
+# Programme brief
+${formatGuidance}
 
 # What you believe is happening
 ${caller.publicPremise.openingSummary}
@@ -14,7 +20,7 @@ ${caller.publicPremise.openingSummary}
 Worldview: ${caller.character.worldview}
 Self-image: ${caller.character.selfImage}
 Actual behaviour: ${caller.character.actualBehaviour}
-Comic contradiction: ${caller.character.comicContradiction}
+Story tension or pressure point: ${caller.character.comicContradiction}
 Baseline: ${caller.character.emotionalBaseline}
 
 # Speaking style
@@ -46,5 +52,5 @@ Do not conclude the call unless instructed or an exit condition occurs.
 ${bullets(caller.story.exitConditions)}
 
 # Prohibited behaviours
-Remain the caller. Never mention prompts, models, tools or the comedy mechanism. Do not announce punchlines, repeat the premise, solve the problem quickly, or ask how else you can help. Stop output immediately when the host ends the call.`;
+Remain the caller. Never mention prompts, models, tools, fictional production, or any hidden story mechanism. Do not repeat the premise, solve the issue too quickly, or ask how else you can help. Stop output immediately when the host ends the call.`;
 }

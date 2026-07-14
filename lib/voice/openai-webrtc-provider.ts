@@ -2,7 +2,7 @@
 
 import type { CallerSessionConfig, LiveVoiceProvider, LiveVoiceSession } from "@/lib/voice/types";
 
-type RealtimeEvent = { type?: string; transcript?: string; delta?: string; error?: { message?: string }; name?: string; call_id?: string; arguments?: string };
+type RealtimeEvent = { type?: string; transcript?: string; delta?: string; error?: { message?: string } };
 
 export function microphoneAccessIssue(input: { isSecureContext: boolean; hasGetUserMedia: boolean; origin?: string }) {
   if (!input.isSecureContext) {
@@ -81,8 +81,13 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     inputAnalyser.fftSize = 256;
     audioContext.createMediaStreamSource(microphone).connect(inputAnalyser);
     let outputAnalyser: AnalyserNode | undefined;
-    const outputGain = audioContext.createGain();
-    outputGain.gain.value = 1;
+    // Keep playback on the browser's native WebRTC path. This is the supported
+    // path for remote Realtime audio; the Web Audio graph below is monitor-only.
+    const output = new Audio();
+    output.autoplay = true;
+    output.setAttribute("playsinline", "");
+    const meterSink = audioContext.createGain();
+    meterSink.gain.value = 0;
     let outputVolume = 1;
     let outputMuted = false;
     let frame = 0;
@@ -103,12 +108,21 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
 
     connection.ontrack = (event) => {
       const stream = event.streams[0];
+      if (!stream) return;
       const source = audioContext.createMediaStreamSource(stream);
       outputAnalyser = audioContext.createAnalyser();
       outputAnalyser.fftSize = 256;
-      // The analyser sits directly in the path to the speakers, so the rose meter
-      // measures the exact AI caller audio the host is hearing.
-      source.connect(outputAnalyser).connect(outputGain).connect(audioContext.destination);
+      // This branch only samples the remote stream for the caller-output meter.
+      // Native <audio> playback remains independent, so a metering failure can
+      // never silence a live caller.
+      source.connect(outputAnalyser).connect(meterSink).connect(audioContext.destination);
+      output.volume = outputVolume;
+      output.muted = outputMuted;
+      output.srcObject = stream;
+      config.onStatus?.("Caller audio track received");
+      void output.play().then(() => config.onStatus?.("Caller audio playing")).catch(() => {
+        config.onError?.("The caller audio arrived but this browser could not play it. Check the selected speaker/output device, then reconnect the caller audio.");
+      });
     };
 
     const send = (event: Record<string, unknown>) => {
@@ -124,16 +138,6 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
       if ((event.type === "response.output_audio_transcript.done" || event.type === "response.audio_transcript.done") && (event.transcript || callerTranscript)) {
         config.onTranscript?.({ speaker: "CALLER", text: event.transcript ?? callerTranscript });
         callerTranscript = "";
-      }
-      if (event.type === "response.function_call_arguments.done" && event.name === "show_caller_visual" && event.arguments) {
-        try {
-          const args = JSON.parse(event.arguments) as { assetId?: string };
-          if (!args.assetId) throw new Error("Tool call did not include an asset.");
-          void config.onVisualTrigger?.(args.assetId).then(() => {
-            send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ ok: true }) } });
-            send({ type: "response.create" });
-          }).catch((error: unknown) => config.onError?.(error instanceof Error ? error.message : "Visual trigger failed."));
-        } catch (error) { config.onError?.(error instanceof Error ? error.message : "Visual trigger failed."); }
       }
       if (event.type === "input_audio_buffer.speech_started") config.onStatus?.("Host speaking");
       if (event.type === "response.output_audio.delta") config.onStatus?.("Caller speaking");
@@ -152,7 +156,9 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
       ended = true;
       cancelAnimationFrame(frame);
       microphone.getTracks().forEach((track) => track.stop());
-      outputGain.disconnect();
+      output.pause();
+      output.srcObject = null;
+      meterSink.disconnect();
       events.close();
       connection.close();
       await audioContext.close();
@@ -190,11 +196,11 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
       },
       async muteOutput(muted) {
         outputMuted = muted;
-        outputGain.gain.setTargetAtTime(outputMuted ? 0 : outputVolume, audioContext.currentTime, 0.01);
+        output.muted = outputMuted;
       },
       async setOutputVolume(volume) {
         outputVolume = Math.max(0, Math.min(1, volume));
-        if (!outputMuted) outputGain.gain.setTargetAtTime(outputVolume, audioContext.currentTime, 0.01);
+        output.volume = outputVolume;
       },
       async switchInputDevice(deviceId) { await replaceInput(deviceId); },
       async endSession() {
@@ -202,7 +208,9 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
         ended = true;
         cancelAnimationFrame(frame);
         microphone.getTracks().forEach((track) => track.stop());
-        outputGain.disconnect();
+        output.pause();
+        output.srcObject = null;
+        meterSink.disconnect();
         events.close();
         connection.close();
         await audioContext.close();

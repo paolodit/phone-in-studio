@@ -8,7 +8,6 @@ export type CallerSessionConfig = {
   onLevels?: (levels: { input: number; output: number; inputBands: number[]; outputBands: number[] }) => void;
   onStatus?: (status: string) => void;
   onError?: (message: string) => void;
-  onVisualTrigger?: (assetId: string) => Promise<void>;
 };
 
 export type LiveVoiceSession = {

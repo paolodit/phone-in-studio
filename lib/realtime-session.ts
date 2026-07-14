@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import type { Caller, CallerAsset } from "@/generated/prisma/client";
 import { buildCallerInstructions } from "@/lib/prompt";
+import type { ShowFormatConfig } from "@/lib/show-format";
 
 const supportedVoices = new Set(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
 const legacyVoiceAliases: Record<string, string> = {
@@ -28,7 +29,7 @@ function speechSpeed(value: unknown) {
   return 1;
 }
 
-export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAsset[] }) {
+export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAsset[] }, showFormat?: Pick<ShowFormatConfig, "formatLabel" | "formatGuidance">) {
   const character = asRecord(caller.character);
   const story = asRecord(caller.story);
   const performance = asRecord(caller.performance);
@@ -66,27 +67,12 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
       suggestedQuestions: Array.isArray(hostSupport.suggestedQuestions) ? hostSupport.suggestedQuestions.map(String) : [],
       challengePoints: Array.isArray(hostSupport.challengePoints) ? hostSupport.challengePoints.map(String) : [],
     },
-  });
+  }, showFormat);
 
-  const visualAssets = (caller.assets ?? []).filter((asset) => asset.type === "SUPPORTING_VISUAL");
-  const visualTool = visualAssets.length ? [{
-    type: "function",
-    name: "show_caller_visual",
-    description: "Show one prepared supporting visual only when its subject naturally arises. Never verbally announce this tool call.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        assetId: { type: "string", enum: visualAssets.map((asset) => asset.id), description: "The prepared asset to show." },
-        reason: { type: "string", description: "Short internal reason tied to the conversation." },
-      },
-      required: ["assetId", "reason"],
-    },
-  }] : [];
   const safetyIdentifier = createHmac("sha256", process.env.AUTH_SECRET ?? "development-only").update(caller.id).digest("hex").slice(0, 24);
   return {
     model: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1",
-    instructions: `${instructions}${visualAssets.length ? `\n\n# Visual trigger tools\nPrepared assets:\n${visualAssets.map((asset) => `- ${asset.id}: ${asset.label}${asset.trigger ? ` — ${asset.trigger}` : ""}`).join("\n")}\nCall show_caller_visual only for a prepared asset when it is relevant. Do not mention the tool or graphic aloud.` : ""}`,
+    instructions,
     // Realtime’s stable session configuration, passed into the server-created ephemeral session.
     output_modalities: ["audio"],
     audio: {
@@ -98,7 +84,6 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
       output: { voice: safeVoice(performance.voiceId), speed: speechSpeed(performance.pacing) },
     },
     max_output_tokens: 180,
-    tools: visualTool,
     tracing: { workflow_name: "ai-phone-in", metadata: { safety_identifier: safetyIdentifier } },
   };
 }

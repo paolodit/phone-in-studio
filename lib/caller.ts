@@ -13,7 +13,7 @@ export function callerStructuredData(input: CallerFormInput) {
       comicContradiction: input.comicContradiction,
       emotionalBaseline: "Mildly aggrieved but trying to stay composed.",
       speechStyle: input.speechStyle,
-      vocabularyNotes: "Use natural, specific language rather than comedy catchphrases.",
+      vocabularyNotes: "Use natural, specific language rather than generic assistant phrases or catchphrases.",
       confidenceLevel: 6,
       patienceLevel: 5,
       defensivenessTriggers: [input.comicContradiction],
@@ -31,6 +31,7 @@ export function callerStructuredData(input: CallerFormInput) {
     },
     performance: {
       voiceId: input.voiceId,
+      elevenLabsVoiceId: input.elevenLabsVoiceId,
       voiceInstructions: input.speechStyle,
       pacing: input.pacing ?? "Conversational",
       averageResponseLength: "One to three sentences",

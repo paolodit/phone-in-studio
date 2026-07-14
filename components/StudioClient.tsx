@@ -5,6 +5,8 @@ import type { BroadcastSnapshot } from "@/lib/public-show";
 import type { StudioControlAction } from "@/lib/schemas";
 import type { StudioState } from "@/lib/studio-state";
 import type { LiveVoiceSession } from "@/lib/voice/types";
+import type { VoiceProviderId } from "@/lib/show-format";
+import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 
@@ -49,10 +51,12 @@ export function StudioClient({
   showId,
   initialSnapshot,
   initialStudioState,
+  initialVoiceProvider,
 }: {
   showId: string;
   initialSnapshot: BroadcastSnapshot;
   initialStudioState: StudioState;
+  initialVoiceProvider: VoiceProviderId;
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [studioState, setStudioState] = useState(initialStudioState);
@@ -63,14 +67,18 @@ export function StudioClient({
   const [levels, setLevels] = useState(emptyLevels);
   const [volume, setVolume] = useState(0.9);
   const [muted, setMuted] = useState(false);
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
   const [sessionConnected, setSessionConnected] = useState(false);
   const [transcript, setTranscript] = useState<{ speaker: "HOST" | "CALLER"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  const [mediaPane, setMediaPane] = useState<"visuals" | "soundboard">("visuals");
   const sessionRef = useRef<LiveVoiceSession | null>(null);
   const soundRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const lastAudioLevelSent = useRef(0);
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
   const caller = studioState.caller;
   const visualAssets = caller?.assets.filter((asset) => asset.type === "SUPPORTING_VISUAL") ?? [];
+  const voiceProviderLabel = voiceProvider === "elevenlabs" ? "ElevenLabs Agent" : "OpenAI Realtime";
 
   const refreshStudio = useCallback(async () => {
     const response = await fetch(`/api/shows/${showId}/studio-state`, { cache: "no-store" });
@@ -79,10 +87,19 @@ export function StudioClient({
 
   useEffect(() => {
     const source = new EventSource(url);
-    source.addEventListener("state", (event) => setSnapshot(JSON.parse(event.data) as BroadcastSnapshot));
+    const handleState = (event: MessageEvent) => {
+      setSnapshot(JSON.parse(event.data) as BroadcastSnapshot);
+      // A producer can append a caller from another browser while the host stays
+      // live. Refresh the private queue panel whenever that broadcast update lands.
+      void refreshStudio();
+    };
+    source.addEventListener("state", handleState);
     source.onerror = () => setMessage("Display sync reconnecting...");
-    return () => source.close();
-  }, [url]);
+    return () => {
+      source.removeEventListener("state", handleState);
+      source.close();
+    };
+  }, [refreshStudio, url]);
 
   useEffect(() => () => {
     window.speechSynthesis?.cancel();
@@ -95,6 +112,18 @@ export function StudioClient({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(entry),
+    });
+  }, [showId]);
+
+  const reportLevels = useCallback((next: typeof emptyLevels) => {
+    setLevels(next);
+    const now = performance.now();
+    if (now - lastAudioLevelSent.current < 90) return;
+    lastAudioLevelSent.current = now;
+    void fetch(`/api/shows/${showId}/audio-levels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: next.output, bands: next.outputBands }),
     });
   }, [showId]);
 
@@ -125,8 +154,8 @@ export function StudioClient({
 
   const connectRealtime = useCallback(async (updateBroadcastState: boolean) => {
     if (!caller) throw new Error("Cue a caller before connecting a voice session.");
-    setVoiceStatus("Connecting to Realtime...");
-    const provider = new OpenAIWebRtcVoiceProvider();
+    setVoiceStatus(`Connecting to ${voiceProviderLabel}…`);
+    const provider = voiceProvider === "elevenlabs" ? new ElevenLabsAgentVoiceProvider() : new OpenAIWebRtcVoiceProvider();
     const session = await provider.createSession({
       showId,
       callerId: caller.id,
@@ -134,10 +163,9 @@ export function StudioClient({
       voiceId: text(caller.performance.voiceId),
       inputDeviceId: inputDeviceId || undefined,
       onTranscript: persistTranscript,
-      onLevels: setLevels,
+      onLevels: reportLevels,
       onStatus: setVoiceStatus,
       onError: (error) => setMessage(error),
-      onVisualTrigger: triggerVisual,
     });
     sessionRef.current = session;
     setSessionConnected(true);
@@ -151,9 +179,9 @@ export function StudioClient({
     if (!inputDeviceId && devices[0]) setInputDeviceId(devices[0].id);
     if (updateBroadcastState) await postControl("MOCK_CONNECT");
     setMessage(updateBroadcastState
-      ? "Realtime caller connected. The caller will open the conversation, then respond after each host turn."
+      ? `${voiceProviderLabel} caller connected. The caller will open the conversation, then respond after each host turn.`
       : "Caller browser audio reconnected. Resume the call when you are ready to put them on air.");
-  }, [caller, inputDeviceId, persistTranscript, postControl, showId, snapshot.broadcastState, triggerVisual, volume]);
+  }, [caller, inputDeviceId, persistTranscript, postControl, reportLevels, showId, snapshot.broadcastState, triggerVisual, voiceProvider, voiceProviderLabel, volume]);
 
   const playMockCaller = useCallback(() => {
     if (!caller) return;
@@ -180,8 +208,13 @@ export function StudioClient({
     setSessionConnected(false);
     setVoiceStatus("No browser voice session");
     setLevels(emptyLevels);
+    void fetch(`/api/shows/${showId}/audio-levels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: 0, bands: emptyLevels.outputBands }),
+    });
     setMuted(false);
-  }, []);
+  }, [showId]);
 
   const control = useCallback(async (action: StudioControlAction) => {
     setBusy(true);
@@ -346,6 +379,32 @@ export function StudioClient({
     }
   };
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      const key = event.key.toLowerCase();
+      const builtIn = {
+        c: { cue: "cheer" as const, message: "Played optional cheer cue." },
+        h: { cue: "horn" as const, message: "Played optional horn cue." },
+        r: { cue: "rimshot" as const, message: "Played optional rimshot cue." },
+        g: { cue: "callerHangup" as const, message: "Played caller hang-up cue." },
+      }[key];
+      if (builtIn) {
+        event.preventDefault();
+        playSynthCue(builtIn.cue);
+        setMessage(builtIn.message);
+        return;
+      }
+      const customEffect = studioState.soundEffects.find((effect) => effect.hotkey?.toLowerCase() === key);
+      if (customEffect) {
+        event.preventDefault();
+        void playSound(customEffect);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [playSound, studioState.soundEffects]);
+
   const broadcastState = snapshot.broadcastState;
   const showIsLive = studioState.showStatus === "LIVE";
   const hasQueuedCaller = studioState.queue.some((item) => item.status === "QUEUED");
@@ -361,6 +420,7 @@ export function StudioClient({
     && studioState.queue.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status))
     && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"].includes(broadcastState);
   const canConnectAi = !sessionConnected && ["CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
+  const connectButtonLabel = `Connect ${voiceProvider === "elevenlabs" ? "ElevenLabs" : "OpenAI"} caller`;
   const stateLabel = broadcastState.replaceAll("_", " ");
   const nextStep = canStart
     ? "Start the show to open the line."
@@ -369,11 +429,11 @@ export function StudioClient({
     : canAnswer
         ? "This caller is coming up. Answer when you are ready to put them on air."
         : broadcastState === "CALLER_CONNECTING"
-          ? "Connect the AI caller. This will ask for microphone permission."
+          ? `${connectButtonLabel}. This will ask for microphone permission.`
         : callerIsHeld
-          ? sessionConnected ? "Caller is on hold. Resume caller to put them back on air." : "Caller is on hold and needs browser voice. Connect the AI caller, then resume them."
+          ? sessionConnected ? "Caller is on hold. Resume caller to put them back on air." : `Caller is on hold and needs browser voice. ${connectButtonLabel}, then resume them.`
           : callerIsLive
-            ? sessionConnected ? "Caller is live. Speak naturally, then pause for their reply." : "The caller is on air but browser voice is not connected. Connect the AI caller, or use the mock line to test your speakers."
+            ? sessionConnected ? "Caller is live. Speak naturally, then pause for their reply." : `The caller is on air but browser voice is not connected. ${connectButtonLabel}, or use the mock line to test your speakers.`
               : canReplayQueue
                 ? "All callers have finished. Queue them all again for another rehearsal run."
                 : "End the current call and the next caller will be prepared automatically.";
@@ -384,13 +444,13 @@ export function StudioClient({
       : canAnswer
         ? { label: `Answer ${caller?.name ?? "caller"}`, run: () => void control("ANSWER_CALL") }
         : broadcastState === "CALLER_CONNECTING"
-          ? { label: "Connect AI caller", run: () => void connectAiCaller() }
+          ? { label: connectButtonLabel, run: () => void connectAiCaller() }
           : callerIsHeld
             ? !sessionConnected
-              ? { label: "Connect AI caller", run: () => void connectAiCaller() }
+              ? { label: connectButtonLabel, run: () => void connectAiCaller() }
               : { label: `Resume ${caller?.name ?? "caller"}`, run: () => void control("RESUME_CALLER") }
             : callerIsLive && !sessionConnected
-              ? { label: "Connect AI caller", run: () => void connectAiCaller() }
+              ? { label: connectButtonLabel, run: () => void connectAiCaller() }
               : canReplayQueue
                 ? { label: "Run all callers again", run: () => void replayQueue() }
               : null;
@@ -404,7 +464,7 @@ export function StudioClient({
             <h2 className="mt-1 text-2xl font-black text-white">{caller?.name ?? "No caller selected"}</h2>
             <p className="mt-1 text-sm text-slate-300">{caller ? `${caller.age ? `${caller.age} - ` : ""}${caller.location}${caller.occupation ? ` - ${caller.occupation}` : ""}` : "Cue the first queued caller after starting the show."}</p>
           </div>
-          <span className={`status ${callerIsLive ? "animate-pulse bg-red-500 text-white" : callerIsHeld ? "bg-amber-400 text-slate-950" : "bg-slate-700 text-slate-200"}`}>{stateLabel}</span>
+          <span className={`status ${callerIsLive ? "animate-pulse bg-rose-700 text-white" : callerIsHeld ? "bg-amber-400 text-slate-950" : "bg-slate-700 text-slate-200"}`}>{stateLabel}</span>
         </div>
         <p className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-400/5 p-3 text-sm font-semibold text-cyan-50">Next step: {nextStep}</p>
         {caller && <>
@@ -415,7 +475,7 @@ export function StudioClient({
               <p className="mt-2 text-sm leading-6 text-slate-300">{caller.openingSummary}</p>
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                 <div><p className="label">Private premise</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
-                <div><p className="label">Hidden contradiction</p><p className="mt-1 text-slate-200">{text(caller.character.comicContradiction)}</p></div>
+                <div><p className="label">Story tension</p><p className="mt-1 text-slate-200">{text(caller.character.comicContradiction)}</p></div>
                 <div><p className="label">Character objective</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
                 <div><p className="label">Concealing</p><p className="mt-1 text-slate-200">{text(caller.story.hiddenTruth)}</p></div>
               </div>
@@ -428,21 +488,23 @@ export function StudioClient({
       <div className="panel panel-pad">
         <div className="flex flex-wrap items-center justify-between gap-3"><p className="eyebrow">Live controls</p>{primaryAction && <button type="button" disabled={busy} onClick={primaryAction.run} className="button-primary">{primaryAction.label}</button>}</div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {callerIsLive && sessionConnected && <><button type="button" disabled={busy} onClick={() => void control("INTERRUPT_CALLER")} className="button-secondary">Interrupt <kbd>Space</kbd></button><button type="button" disabled={busy} onClick={() => void control(muted ? "UNMUTE_CALLER" : "MUTE_CALLER")} className="button-secondary">{muted ? "Unmute" : "Mute"} <kbd>M</kbd></button><button type="button" disabled={busy} onClick={() => void control("HOLD_CALLER")} className="button-secondary">Put on hold</button></>}
+          {callerIsLive && sessionConnected && <><button type="button" disabled={busy} onClick={() => void control("INTERRUPT_CALLER")} className="button-secondary">Interrupt (Space)</button><button type="button" disabled={busy} onClick={() => void control(muted ? "UNMUTE_CALLER" : "MUTE_CALLER")} className="button-secondary">{muted ? "Unmute" : "Mute"} (M)</button><button type="button" disabled={busy} onClick={() => void control("HOLD_CALLER")} className="button-secondary">Put on hold</button></>}
           {callerIsLive && <button type="button" disabled={busy} onClick={() => void control("MOCK_SPEAK")} className="button-secondary">Test speaker with mock line</button>}
           {broadcastState === "CALLER_CONNECTING" && <button type="button" disabled={busy} onClick={() => void startMockCaller()} className="button-secondary">Use mock caller instead</button>}
-          {callerCanEnd && <button type="button" disabled={busy} onClick={() => void control("END_CALL")} className="button-danger">End call <kbd>E</kbd></button>}
+          {callerCanEnd && <button type="button" disabled={busy} onClick={() => void control("END_CALL")} className="button-danger">End call (E)</button>}
           {callerIsLive && <button type="button" disabled={busy} onClick={() => void control("CALLER_HANGS_UP")} className="button-secondary">Caller hangs up</button>}
           {callerCanSkip && <button type="button" disabled={busy} onClick={() => void control("SKIP_CALLER")} className="button-secondary">Skip caller</button>}
           <button type="button" disabled={busy} onClick={() => void triggerVisual(null)} className="button-secondary">Clear visual</button>
-          {showIsLive && <button type="button" disabled={busy} onClick={() => void control("EMERGENCY_STOP")} className="button-danger"><kbd>Esc</kbd> Stop all audio</button>}
+          {showIsLive && <button type="button" disabled={busy} onClick={() => void control("EMERGENCY_STOP")} className="button-danger">Stop all audio (Esc)</button>}
         </div>
         {canConnectAi && <p className="mt-3 text-xs text-slate-400">The main action above creates a fresh, one-use connection for this caller. You never need to manage session credentials.</p>}
         <div className="mt-4 grid gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 md:grid-cols-2">
           <div>
             <p className="label">Voice session</p>
             <p className="mt-1 text-sm text-cyan-200">{voiceStatus}</p>
+            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime</option><option value="elevenlabs">ElevenLabs Agent</option></select></label>
             <p className="mt-2 text-xs text-amber-200">Use headphones during live calls to prevent feedback. Live browser audio needs Chrome or Edge at <b>http://localhost:3000</b> or an HTTPS URL; HTTP on a LAN/IP address cannot use the microphone.</p>
+            {voiceProvider === "elevenlabs" && <p className="mt-2 text-xs text-slate-400">ElevenLabs uses your configured Agent with a short-lived WebRTC token. Set its API key and Agent ID in <code>.env.local</code>; use the caller editor to optionally give an individual caller a voice ID.</p>}
           </div>
           <div className="space-y-2">
             <label className="block"><span className="label">Host microphone</span><select className="field !mt-1" value={inputDeviceId} onChange={(event) => void changeInput(event.target.value)} disabled={!sessionConnected}><option value="">Default microphone</option>{inputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
@@ -459,8 +521,12 @@ export function StudioClient({
 
     <aside className="space-y-5">
       <div className="panel panel-pad"><p className="eyebrow">Up next</p><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
-      <div className="panel panel-pad"><p className="eyebrow">Prepared visuals</p><div className="mt-3 grid grid-cols-2 gap-2">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void triggerVisual(asset.id)} className="aspect-video overflow-hidden rounded-lg border border-slate-700 bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400"><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></div>
-      <div className="panel panel-pad"><p className="eyebrow">Soundboard</p><p className="mt-2 text-xs text-slate-400">Incoming, connection and host hang-up tones run automatically. These are optional host triggers.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { playSynthCue("cheer"); setMessage("Played optional cheer cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Cheer</button><button type="button" onClick={() => { playSynthCue("horn"); setMessage("Played optional horn cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Horn</button><button type="button" onClick={() => { playSynthCue("rimshot"); setMessage("Played optional rimshot cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Rimshot</button><button type="button" onClick={() => { playSynthCue("callerHangup"); setMessage("Played caller hang-up cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Caller hangs up</button>{studioState.soundEffects.map((effect) => <div key={effect.id} className="rounded-lg border border-slate-700 bg-slate-950 p-2"><button type="button" onClick={() => void playSound(effect)} className="w-full text-left text-xs font-bold text-slate-100 hover:text-cyan-200">Play {effect.label}</button><button type="button" onClick={() => stopSound(effect.id)} className="mt-2 text-[10px] font-bold uppercase text-slate-500">Stop</button></div>)}</div><p className="mt-3 text-xs text-slate-500">Add URL-based custom cues from the show page.</p></div>
+      <div className="panel panel-pad">
+        <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals">▣ Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard">♪ Sounds</button></div></div>
+        {mediaPane === "visuals"
+          ? <><p className="mt-2 text-xs text-slate-400">Choose an image to send it to the broadcast display. Newly added caller visuals are available immediately.</p><div className="mt-3 grid grid-cols-2 gap-2">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void triggerVisual(asset.id)} className="aspect-video overflow-hidden rounded-lg border border-slate-700 bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400"><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></>
+          : <><p className="mt-2 text-xs text-slate-400">Incoming, connection and host hang-up tones run automatically. These are optional host triggers.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { playSynthCue("cheer"); setMessage("Played optional cheer cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Cheer [C]</button><button type="button" onClick={() => { playSynthCue("horn"); setMessage("Played optional horn cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Horn [H]</button><button type="button" onClick={() => { playSynthCue("rimshot"); setMessage("Played optional rimshot cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Rimshot [R]</button><button type="button" onClick={() => { playSynthCue("callerHangup"); setMessage("Played caller hang-up cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Caller hangs up [G]</button>{studioState.soundEffects.map((effect) => <div key={effect.id} className="rounded-lg border border-slate-700 bg-slate-950 p-2"><button type="button" onClick={() => void playSound(effect)} className="w-full text-left text-xs font-bold text-slate-100 hover:text-cyan-200">Play {effect.label}{effect.hotkey ? ` [${effect.hotkey}]` : ""}</button><button type="button" onClick={() => stopSound(effect.id)} className="mt-2 text-[10px] font-bold uppercase text-slate-500">Stop</button></div>)}</div><p className="mt-3 text-xs text-slate-500">Add URL-based custom cues and a one-character hotkey from the show page.</p></>}
+      </div>
       <div className="panel panel-pad"><p className="eyebrow">Live transcript</p><div className="mt-3 max-h-48 space-y-2 overflow-auto text-xs">{transcript.length ? transcript.map((entry, index) => <p key={`${entry.speaker}-${index}`}><b className="text-cyan-300">{entry.speaker === "HOST" ? "HOST" : "CALLER"}</b> <span className="text-slate-200">{entry.text}</span></p>) : <p className="text-slate-400">Transcript events will appear and persist here during a Realtime call.</p>}</div></div>
       <div className="panel panel-pad"><p className="eyebrow">Event log</p><div className="mt-3 max-h-40 space-y-2 overflow-auto text-xs">{studioState.events.map((event, index) => <div className="flex justify-between gap-3 border-b border-slate-800 pb-2" key={`${event.timestamp}-${index}`}><span className="text-slate-200">{event.type.replaceAll("_", " ")}</span><time className="shrink-0 text-slate-500">{eventTime(event.timestamp)}</time></div>)}</div></div>
     </aside>

@@ -1,6 +1,6 @@
 import { canViewBroadcast, getBroadcastSnapshot } from "@/lib/show-service";
 import { isAdminSession } from "@/lib/auth";
-import { subscribeToShow } from "@/lib/events";
+import { subscribeToShow, subscribeToShowAudioLevels } from "@/lib/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,13 +12,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ show
   const initial = await getBroadcastSnapshot(showId);
   const encoder = new TextEncoder();
   let unsubscribe = () => {};
+  let unsubscribeAudio = () => {};
   let heartbeat: ReturnType<typeof setInterval> | undefined;
-  const close = () => { unsubscribe(); if (heartbeat) clearInterval(heartbeat); };
+  const close = () => { unsubscribe(); unsubscribeAudio(); if (heartbeat) clearInterval(heartbeat); };
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (snapshot: typeof initial) => controller.enqueue(encoder.encode(`event: state\ndata: ${JSON.stringify(snapshot)}\n\n`));
+      const sendAudio = (levels: { bands: number[]; level: number }) => controller.enqueue(encoder.encode(`event: audio-level\ndata: ${JSON.stringify(levels)}\n\n`));
       send(initial);
       unsubscribe = subscribeToShow(showId, send);
+      unsubscribeAudio = subscribeToShowAudioLevels(showId, sendAudio);
       heartbeat = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000);
       request.signal.addEventListener("abort", close, { once: true });
     },

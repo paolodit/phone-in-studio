@@ -9,7 +9,7 @@ import {
   type GeneratedCallerDraft,
 } from "@/lib/schemas";
 
-export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-12.1";
+export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-14.1";
 const DEFAULT_CALLER_GENERATION_MODEL = "gpt-5.4-mini";
 
 type JsonSchema = Record<string, unknown>;
@@ -45,13 +45,14 @@ const callerDraftJsonSchema: JsonSchema = {
     speechStyle: { type: "string" }, hiddenTruth: { type: "string" },
     escalationBeats: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
     suggestedQuestions: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
+    topicTags: { type: "array", minItems: 1, maxItems: 6, items: { type: "string" } },
     voiceId: { type: "string", enum: ["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"] },
     originalityNotes: { type: "string" }, producerReviewNotes: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
   },
   required: [
     "firstName", "surnameInitial", "age", "location", "occupation", "relationshipStatus", "issueHeadline", "openingSummary",
     "centralWant", "worldview", "actualBehaviour", "comicContradiction", "speechStyle", "hiddenTruth", "escalationBeats", "suggestedQuestions",
-    "voiceId", "originalityNotes", "producerReviewNotes",
+    "topicTags", "voiceId", "originalityNotes", "producerReviewNotes",
   ],
   additionalProperties: false,
 };
@@ -129,10 +130,10 @@ export async function generateCallerPremises(sourceNotes: string) {
     schema: premisesJsonSchema,
     maxOutputTokens: 2_000,
     instructions: [
-      "You are a development editor for a fictional, adult UK radio phone-in comedy show.",
-      "Generate exactly six clearly different premise options from the producer's seed. Every caller must be wholly fictional and an adult.",
-      "Do not use real people, real private individuals, brands, existing fictional characters, performers' styles, protected characteristics as the joke, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
-      "Make the comic engine come from a mundane dispute, the caller's blind spot, and a host who can courteously challenge the contradiction.",
+      "You are a development editor for a fictional, adult UK phone-in and livestream production toolkit.",
+      "Generate exactly six clearly different caller or guest premise options from the producer's seed. Every caller must be wholly fictional and an adult.",
+      "Do not use real people, real private individuals, brands, existing fictional characters, performers' styles, protected characteristics as material, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
+      "Give each option a playable point of view, a specific pressure point or tension, and a host who can courteously explore it. Humour is optional: the seed may suit advice, discussion, story, sport, competition, or entertainment formats.",
       "The originality warning should tell the producer what to vary or check before using the idea. Keep all fields concise and production-useful.",
     ].join(" "),
     input: `Producer seed notes:\n${input.sourceNotes}`,
@@ -148,11 +149,11 @@ export async function developCallerFromPremise(sourceNotes: string, premise: Cal
     schema: callerDraftJsonSchema,
     maxOutputTokens: 3_000,
     instructions: [
-      "You are a development editor for a fictional, adult UK radio phone-in comedy show.",
+      "You are a development editor for a fictional, adult UK phone-in and livestream production toolkit.",
       "Turn the producer's seed and selected premise into one internally consistent caller card. It is a private production draft, never an approved or live caller.",
-      "The caller must be wholly fictional and adult. Do not use real people, brands, existing fictional characters, performer styles, protected characteristics as punchlines, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
-      "Use a mundane, reversible problem. Make the public summary playable, the hidden truth specific, and the host questions fair rather than cruel.",
-      "Choose one suitable voiceId from the allowed options. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
+      "The caller must be wholly fictional and adult. Do not use real people, brands, existing fictional characters, performer styles, protected characteristics as material, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
+      "Keep the scenario safe and reversible. Make the public summary playable, the withheld detail specific, and the host questions fair rather than cruel. The card should work for the format implied by the producer's seed; it is not limited to comedy.",
+      "Choose one suitable voiceId from the allowed options. Add one to six concise topicTags useful for filtering the caller library. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
     ].join(" "),
     input: `Producer seed notes:\n${input.sourceNotes}\n\nSelected premise:\n${JSON.stringify(selectedPremise)}`,
     validate: (value) => generatedCallerDraftSchema.parse(value),
@@ -177,7 +178,9 @@ export function generatedDraftToCallerForm(draft: GeneratedCallerDraft): CallerF
     hiddenTruth: draft.hiddenTruth,
     escalationBeats: draft.escalationBeats.join("\n"),
     suggestedQuestions: draft.suggestedQuestions.join("\n"),
+    topicTags: draft.topicTags.join(", "),
     voiceId: draft.voiceId,
+    elevenLabsVoiceId: undefined,
     portraitUrl: undefined,
   };
 }

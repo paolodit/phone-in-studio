@@ -4,6 +4,8 @@ import { CallerStatus, Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { callerStructuredData } from "@/lib/caller";
+import { jsonRecord, parseCallerTags } from "@/lib/caller-tags";
+import { searchStockImages } from "@/lib/stock-images";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { callerAssetFormSchema, callerFormSchema, callerReviewSchema } from "@/lib/schemas";
@@ -30,6 +32,7 @@ export async function createCallerAction(formData: FormData) {
       story: structured.story as Prisma.InputJsonValue,
       performance: structured.performance as Prisma.InputJsonValue,
       hostSupport: structured.hostSupport as Prisma.InputJsonValue,
+      generation: { topicTags: parseCallerTags(input.topicTags) } as Prisma.InputJsonValue,
       quality: { overall: 0 } as Prisma.InputJsonValue,
       ...(input.portraitUrl
         ? { assets: { create: { type: "PORTRAIT", label: `${input.firstName} portrait`, url: input.portraitUrl } } }
@@ -43,6 +46,7 @@ export async function updateCallerAction(callerId: string, formData: FormData) {
   await requireAdmin();
   const input = callerFormSchema.parse(formToObject(formData));
   const structured = callerStructuredData(input);
+  const existingCaller = await prisma.caller.findUniqueOrThrow({ where: { id: callerId }, select: { generation: true } });
   await prisma.$transaction(async (tx) => {
     await tx.caller.update({
       where: { id: callerId },
@@ -59,6 +63,7 @@ export async function updateCallerAction(callerId: string, formData: FormData) {
         story: structured.story as Prisma.InputJsonValue,
         performance: structured.performance as Prisma.InputJsonValue,
         hostSupport: structured.hostSupport as Prisma.InputJsonValue,
+        generation: { ...jsonRecord(existingCaller.generation), topicTags: parseCallerTags(input.topicTags) } as Prisma.InputJsonValue,
       },
     });
     if (input.portraitUrl) {
@@ -136,9 +141,32 @@ export async function addSupportingVisualAction(callerId: string, formData: Form
   await requireAdmin();
   const input = callerAssetFormSchema.parse(formToObject(formData));
   await prisma.callerAsset.create({
-    data: { callerId, type: "SUPPORTING_VISUAL", label: input.label, url: input.url, trigger: input.trigger, manualHotkey: input.manualHotkey },
+    data: { callerId, type: "SUPPORTING_VISUAL", label: input.label, url: input.url, manualHotkey: input.manualHotkey },
   });
   revalidatePath(`/callers/${callerId}`);
+}
+
+export async function prepareTopicVisualsAction(callerId: string) {
+  await requireAdmin();
+  const caller = await prisma.caller.findUniqueOrThrow({ where: { id: callerId }, select: { issueHeadline: true, openingSummary: true } });
+  const query = `${caller.issueHeadline} ${caller.openingSummary}`.slice(0, 180);
+  const { results } = await searchStockImages(query, "auto");
+  if (!results.length) throw new Error("No suitable stock images were found. Try the image feed with a broader search.");
+  const start = Math.floor(Date.now() / 1_000) % results.length;
+  const selected = Array.from({ length: Math.min(3, results.length) }, (_, index) => results[(start + index) % results.length]);
+  await prisma.$transaction(async (tx) => {
+    await tx.callerAsset.deleteMany({ where: { callerId, type: "SUPPORTING_VISUAL", url: { endsWith: "/visuals/placeholder.svg" } } });
+    await tx.callerAsset.createMany({ data: selected.map((image, index) => ({
+      callerId,
+      type: "SUPPORTING_VISUAL",
+      label: `${image.provider === "pexels" ? "Pexels" : "Pixabay"}: ${image.alt}`.slice(0, 120),
+      url: image.imageUrl,
+      manualHotkey: String(index + 1),
+      priority: index + 1,
+    })) });
+  });
+  revalidatePath(`/callers/${callerId}`);
+  revalidatePath("/studio");
 }
 
 export async function deleteCallerAssetAction(callerId: string, assetId: string) {

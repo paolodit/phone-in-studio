@@ -19,7 +19,9 @@ export const callerFormSchema = z.object({
   hiddenTruth: z.string().trim().min(3).max(1_000),
   escalationBeats: z.string().trim().min(3).max(2_000),
   suggestedQuestions: z.string().trim().min(3).max(2_000),
+  topicTags: z.string().trim().max(320).optional().default(""),
   voiceId: z.string().trim().min(1).max(120),
+  elevenLabsVoiceId: optionalText,
   pacing: z.enum(["Measured", "Conversational", "Brisk", "Animated"]).optional(),
   portraitUrl: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
 });
@@ -63,6 +65,7 @@ export const generatedCallerDraftSchema = z.object({
   hiddenTruth: z.string().trim().min(3).max(1_000),
   escalationBeats: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
   suggestedQuestions: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
+  topicTags: z.array(z.string().trim().min(2).max(40)).max(6).optional().default([]),
   voiceId: z.enum(["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"]),
   originalityNotes: z.string().trim().min(8).max(500),
   producerReviewNotes: z.array(z.string().trim().min(3).max(500)).min(1).max(5),
@@ -108,6 +111,31 @@ export type StudioControlAction = z.infer<typeof queueControlSchema>["action"];
 
 export const queueReorderSchema = z.object({
   queueItemIds: z.array(z.string().min(1)).min(1).max(200).refine((ids) => new Set(ids).size === ids.length, "Caller IDs must be unique."),
+});
+
+export const queueCallerSchema = z.object({
+  callerId: z.string().min(1),
+});
+
+export const queueReactivateSchema = z.object({
+  queueItemId: z.string().min(1),
+});
+
+export const audioLevelsSchema = z.object({
+  level: z.number().min(0).max(1),
+  bands: z.array(z.number().min(0).max(1)).length(12),
+});
+
+export const generatedImageSchema = z.object({
+  prompt: z.string().trim().min(8).max(1_500),
+  kind: z.enum(["portrait", "topic"]),
+});
+
+export const showSetupSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  formatId: z.enum(["general", "advice", "discussion", "stories", "sports", "competition", "entertainment"]),
+  formatGuidance: z.string().trim().max(1_500).optional().transform((value) => value || undefined),
+  voiceProvider: z.enum(["openai", "elevenlabs"]),
 });
 
 export const realtimeSessionRequestSchema = z.object({

@@ -21,6 +21,6 @@ a { color: inherit; }
   .button { @apply inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-bold transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-cyan-300; }
   .button-primary { @apply button bg-cyan-400 text-slate-950; }
   .button-secondary { @apply button bg-slate-700 text-white; }
-  .button-danger { @apply button bg-red-500 text-white; }
+  .button-danger { @apply button border border-rose-400/25 bg-rose-950/70 text-rose-100 hover:bg-rose-900/80; }
   .status { @apply inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide; }
 }

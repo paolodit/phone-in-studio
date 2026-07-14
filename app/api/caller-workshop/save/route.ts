@@ -35,6 +35,7 @@ export async function POST(request: Request) {
           promptVersion: CALLER_WORKSHOP_PROMPT_VERSION,
           sourceNotes: input.sourceNotes,
           selectedPremise: input.premise,
+          topicTags: input.draft.topicTags,
           originalityNotes: input.draft.originalityNotes,
           producerReviewNotes: input.draft.producerReviewNotes,
           generatedAt: new Date().toISOString(),

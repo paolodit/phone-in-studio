@@ -16,6 +16,8 @@ function withPositions(items: QueueOrderItem[]) {
   return items.map((item, index) => ({ ...item, position: index + 1 }));
 }
 
+const finishedStatuses = new Set(["COMPLETED", "SKIPPED", "FAILED"]);
+
 export function QueueOrderEditor({
   showId,
   items: initialItems,
@@ -35,6 +37,11 @@ export function QueueOrderEditor({
 
   useEffect(() => setItems(initialItems), [initialItems]);
 
+  const refresh = async () => {
+    await onReordered?.();
+    if (refreshOnReorder) router.refresh();
+  };
+
   const persistOrder = async (next: QueueOrderItem[]) => {
     const previous = items;
     const positioned = withPositions(next);
@@ -49,8 +56,7 @@ export function QueueOrderEditor({
       });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Unable to reorder the callers.");
-      await onReordered?.();
-      if (refreshOnReorder) router.refresh();
+      await refresh();
     } catch (caught) {
       setItems(previous);
       setError(caught instanceof Error ? caught.message : "Unable to reorder the callers.");
@@ -67,22 +73,30 @@ export function QueueOrderEditor({
     void persistOrder(moveQueueEntry(items, movingId, targetId));
   };
 
-  const moveBy = (item: QueueOrderItem, direction: -1 | 1) => {
-    const from = items.findIndex((candidate) => candidate.id === item.id);
-    for (let index = from + direction; index >= 0 && index < items.length; index += direction) {
-      if (items[index].status === "QUEUED") {
-        move(item.id, items[index].id);
-        return;
-      }
+  const reactivate = async (item: QueueOrderItem) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/shows/${showId}/queue`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueItemId: item.id }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to reactivate the caller.");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to reactivate the caller.");
+    } finally {
+      setSaving(false);
     }
   };
 
   return <div className="mt-4 space-y-2" aria-label="Caller running order">
-    <p className="text-xs text-slate-400">Drag queued callers to reorder them. Live and finished callers stay locked.</p>
-    {items.map((item, index) => {
+    <p className="text-xs text-slate-400">Drag queued callers to reorder them. Reactivate a finished caller to unlock its position, then drag it into the running order.</p>
+    {items.map((item) => {
       const movable = item.status === "QUEUED";
-      const hasPreviousQueued = items.slice(0, index).some((candidate) => candidate.status === "QUEUED");
-      const hasNextQueued = items.slice(index + 1).some((candidate) => candidate.status === "QUEUED");
+      const canReactivate = finishedStatuses.has(item.status);
       return <div
         key={item.id}
         data-testid={`queue-item-${item.id}`}
@@ -91,16 +105,16 @@ export function QueueOrderEditor({
         onDragEnd={() => setDraggingId(null)}
         onDragOver={(event) => { if (movable && draggingId && !saving) event.preventDefault(); }}
         onDrop={(event) => { event.preventDefault(); if (draggingId) move(draggingId, item.id); }}
-        className={`flex items-center gap-3 rounded-xl border bg-slate-950/60 p-3 transition ${movable ? "cursor-grab border-slate-700 hover:border-cyan-400 active:cursor-grabbing" : "cursor-not-allowed border-slate-800 opacity-75"} ${draggingId === item.id ? "border-cyan-300 bg-cyan-400/10" : ""}`}
+        className={`flex items-center gap-3 rounded-xl border bg-slate-950/60 p-3 transition ${movable ? "cursor-grab border-slate-700 hover:border-cyan-400 active:cursor-grabbing" : "border-slate-800 opacity-75"} ${draggingId === item.id ? "border-cyan-300 bg-cyan-400/10" : ""}`}
       >
-        <span aria-hidden="true" className={`text-lg ${movable ? "text-cyan-300" : "text-slate-600"}`}>⠿</span>
+        <span aria-hidden="true" className={`text-lg ${movable ? "text-cyan-300" : "text-slate-600"}`}>⋮⋮</span>
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-800 text-xs font-bold">{item.position}</span>
         <div className="min-w-0 flex-1"><p className="font-semibold text-white">{item.name}</p><p className="truncate text-xs text-slate-400">{item.issue}</p></div>
         <span className="status bg-slate-800 text-slate-300">{item.status}</span>
-        {movable && <div className="flex gap-1"><button type="button" className="button-secondary !min-h-8 !px-2" disabled={saving || !hasPreviousQueued} onClick={() => moveBy(item, -1)} aria-label={`Move ${item.name} earlier`}>↑</button><button type="button" className="button-secondary !min-h-8 !px-2" disabled={saving || !hasNextQueued} onClick={() => moveBy(item, 1)} aria-label={`Move ${item.name} later`}>↓</button></div>}
+        {canReactivate && <button type="button" className="button-secondary !min-h-8 !w-8 !px-0 text-base" disabled={saving} onClick={() => void reactivate(item)} aria-label={`Reactivate ${item.name}`} title="Reactivate caller">↻</button>}
       </div>;
     })}
     {items.length === 0 && <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">The running order is empty.</p>}
-    {error && <p role="alert" className="rounded-lg bg-red-500/15 p-3 text-sm text-red-200">{error}</p>}
+    {error && <p role="alert" className="rounded-lg bg-rose-900/30 p-3 text-sm text-rose-100">{error}</p>}
   </div>;
 }
