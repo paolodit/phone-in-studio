@@ -42,9 +42,10 @@ export async function POST(request: Request) {
         quality: { overall: 0, reviewRequired: true } as Prisma.InputJsonValue,
       },
     });
-    return NextResponse.json({ callerId: caller.id }, { status: 201 });
+    return NextResponse.json({ callerId: caller.id, editUrl: `/callers/${caller.id}` }, { status: 201 });
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.issues[0]?.message ?? "The draft is incomplete." }, { status: 400 });
+    console.error("Caller Workshop save failed", error);
     return NextResponse.json({ error: "Unable to save this caller draft." }, { status: 500 });
   }
 }

@@ -1,0 +1,1 @@
+ALTER TYPE "ShowEventType" ADD VALUE 'SHOW_RESET';

@@ -129,6 +129,50 @@ export async function reorderShowQueue(showId: string, queueItemIds: string[]) {
   publishShowUpdate(showId, await getBroadcastSnapshot(showId));
 }
 
+const replayableBroadcastStates = new Set(["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"]);
+
+export function canResetShowForReplay(broadcastState: string) {
+  return replayableBroadcastStates.has(broadcastState);
+}
+
+export async function resetShowForReplay(showId: string) {
+  await prisma.$transaction(async (tx) => {
+    const show = await tx.show.findUniqueOrThrow({ where: { id: showId } });
+    if (!canResetShowForReplay(show.broadcastState)) {
+      throw new Error("End the active caller before resetting this running order.");
+    }
+    const activeItems = await tx.queueItem.count({ where: { showId, status: { in: ["CONNECTING", "LIVE"] } } });
+    if (activeItems > 0) throw new Error("End the active caller before resetting this running order.");
+
+    await tx.queueItem.updateMany({
+      where: { showId, status: { in: ["COMPLETED", "SKIPPED", "FAILED"] } },
+      data: { status: "QUEUED", startedAt: null, endedAt: null },
+    });
+    await tx.show.update({
+      where: { id: showId },
+      data: {
+        status: "READY",
+        broadcastState: "SHOW_IDLE",
+        currentQueueItemId: null,
+        currentVisualAssetId: null,
+        startedAt: null,
+        endedAt: null,
+      },
+    });
+    await tx.showEvent.create({
+      data: {
+        showId,
+        type: "SHOW_RESET",
+        payload: { action: "RESET_FOR_REHEARSAL" } as Prisma.InputJsonValue,
+      },
+    });
+  });
+
+  const snapshot = await getBroadcastSnapshot(showId);
+  publishShowUpdate(showId, snapshot);
+  return snapshot;
+}
+
 export async function applyBroadcastVisual(showId: string, assetId: string | null) {
   await prisma.$transaction(async (tx) => {
     const show = await tx.show.findUniqueOrThrow({ where: { id: showId } });

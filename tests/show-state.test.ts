@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { transitionShow, type MachineState } from "@/lib/show-state";
+import { canResetShowForReplay } from "@/lib/show-service";
 
 describe("show state machine", () => {
   it("runs the mock caller sequence from idle to ended", () => {
@@ -25,5 +26,12 @@ describe("show state machine", () => {
     const state: MachineState = { showStatus: "LIVE", broadcastState: "SHOW_IDLE", queueStatus: null };
     expect(() => transitionShow(state, "ANSWER_CALL")).toThrow(/not valid/);
     expect(() => transitionShow(state, "CUE_NEXT", false)).toThrow(/not valid/);
+  });
+
+  it("only allows a completed or idle display to reset for another rehearsal", () => {
+    expect(canResetShowForReplay("CALLER_ENDED")).toBe(true);
+    expect(canResetShowForReplay("SHOW_ENDED")).toBe(true);
+    expect(canResetShowForReplay("CALLER_LIVE")).toBe(false);
+    expect(canResetShowForReplay("CALLER_CONNECTING")).toBe(false);
   });
 });

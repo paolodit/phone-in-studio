@@ -7,6 +7,7 @@ import { createCallerSnapshot } from "@/lib/caller";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { soundEffectFormSchema } from "@/lib/schemas";
+import { resetShowForReplay } from "@/lib/show-service";
 
 export async function createShowAction(formData: FormData) {
   await requireAdmin();
@@ -34,6 +35,15 @@ export async function deleteShowAction(showId: string) {
   revalidatePath("/shows");
   revalidatePath("/studio");
   redirect("/shows");
+}
+
+export async function resetShowForReplayAction(showId: string) {
+  await requireAdmin();
+  await resetShowForReplay(showId);
+  revalidatePath(`/shows/${showId}`);
+  revalidatePath("/shows");
+  revalidatePath("/studio");
+  redirect(`/studio?show=${showId}`);
 }
 
 export async function addSoundEffectAction(showId: string, formData: FormData) {

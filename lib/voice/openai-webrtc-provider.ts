@@ -73,9 +73,6 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     if (config.inputDeviceId) constraints.deviceId = { exact: config.inputDeviceId };
     let microphone = await getMicrophone(constraints);
     const connection = new RTCPeerConnection();
-    const output = new Audio();
-    output.autoplay = true;
-    output.volume = 1;
     const events = connection.createDataChannel("oai-events");
     let sender = connection.addTrack(microphone.getAudioTracks()[0], microphone);
     const audioContext = new AudioContext();
@@ -84,6 +81,10 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     inputAnalyser.fftSize = 256;
     audioContext.createMediaStreamSource(microphone).connect(inputAnalyser);
     let outputAnalyser: AnalyserNode | undefined;
+    const outputGain = audioContext.createGain();
+    outputGain.gain.value = 1;
+    let outputVolume = 1;
+    let outputMuted = false;
     let frame = 0;
     let ended = false;
     let callerTranscript = "";
@@ -102,12 +103,12 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
 
     connection.ontrack = (event) => {
       const stream = event.streams[0];
-      output.srcObject = stream;
       const source = audioContext.createMediaStreamSource(stream);
       outputAnalyser = audioContext.createAnalyser();
       outputAnalyser.fftSize = 256;
-      source.connect(outputAnalyser);
-      void output.play().catch(() => config.onError?.("Browser blocked caller audio playback. Click Answer Call again."));
+      // The analyser sits directly in the path to the speakers, so the rose meter
+      // measures the exact AI caller audio the host is hearing.
+      source.connect(outputAnalyser).connect(outputGain).connect(audioContext.destination);
     };
 
     const send = (event: Record<string, unknown>) => {
@@ -151,8 +152,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
       ended = true;
       cancelAnimationFrame(frame);
       microphone.getTracks().forEach((track) => track.stop());
-      output.pause();
-      output.srcObject = null;
+      outputGain.disconnect();
       events.close();
       connection.close();
       await audioContext.close();
@@ -188,16 +188,21 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
         send({ type: "response.cancel" });
         send({ type: "output_audio_buffer.clear" });
       },
-      async muteOutput(muted) { output.muted = muted; },
-      async setOutputVolume(volume) { output.volume = Math.max(0, Math.min(1, volume)); },
+      async muteOutput(muted) {
+        outputMuted = muted;
+        outputGain.gain.setTargetAtTime(outputMuted ? 0 : outputVolume, audioContext.currentTime, 0.01);
+      },
+      async setOutputVolume(volume) {
+        outputVolume = Math.max(0, Math.min(1, volume));
+        if (!outputMuted) outputGain.gain.setTargetAtTime(outputVolume, audioContext.currentTime, 0.01);
+      },
       async switchInputDevice(deviceId) { await replaceInput(deviceId); },
       async endSession() {
         if (ended) return;
         ended = true;
         cancelAnimationFrame(frame);
         microphone.getTracks().forEach((track) => track.stop());
-        output.pause();
-        output.srcObject = null;
+        outputGain.disconnect();
         events.close();
         connection.close();
         await audioContext.close();

@@ -17,6 +17,7 @@ A human-hosted comedy phone-in studio: producers build fictional caller cards, h
 2. The broadcast display changes to a compact **Coming up next** card. Press **Answer** only when you want that caller on air.
 3. The Studio asks for microphone permission, connects the AI caller and the caller opens naturally before waiting for the host.
 4. Press **End call**. The host hang-up sting plays and the next caller is immediately prepared on the broadcast display; no separate "call next guest" step is needed.
+5. After the last caller, choose **Run all callers again** to reset the completed running order for another rehearsal. The same safe reset is available as **Requeue every caller** on the show page.
 
 The Studio also offers a caller-hang-up control, automatic incoming/connection stings, optional cheer/horn/rimshot cues, manual prepared visuals, queue drag-and-drop, live transcript entries and caller output metering.
 
@@ -29,6 +30,10 @@ The browser creates the WebRTC offer; the server performs the Realtime call nego
 Each caller has a selected OpenAI voice and delivery pace. The caller brief also controls their specificity, cadence and what they reveal. Existing development callers automatically map to distinct supported voices; use the caller editor to choose voices and pace deliberately for future callers.
 
 Wear headphones during a live call and check the moving **Caller output** equalizer before treating a session as broadcast-safe.
+
+## Caller workshop
+
+The workshop deliberately keeps the six generated premises as ideas until you select one and develop it. In the final review, select **Save and open editor**: it creates a normal private caller draft, then opens its editable caller page. The review displays a direct editor link as a fallback, so a completed save is never hidden if navigation is interrupted.
 
 ## Stock image feed
 

@@ -303,6 +303,23 @@ export function StudioClient({
     await sessionRef.current?.setOutputVolume(next);
   };
 
+  const replayQueue = useCallback(async () => {
+    setBusy(true);
+    try {
+      await endBrowserAudio();
+      const response = await fetch(`/api/shows/${showId}/reset`, { method: "POST" });
+      const data = await response.json() as BroadcastSnapshot & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to reset the running order.");
+      setSnapshot(data);
+      await refreshStudio();
+      setMessage("All callers are queued again. Start the show whenever you are ready for another run-through.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to reset the running order.");
+    } finally {
+      setBusy(false);
+    }
+  }, [endBrowserAudio, refreshStudio, showId]);
+
   const playSound = async (effect: StudioState["soundEffects"][number]) => {
     let audio = soundRef.current.get(effect.id);
     if (!audio) {
@@ -339,6 +356,10 @@ export function StudioClient({
   const callerIsHeld = broadcastState === "CALLER_ON_HOLD";
   const callerCanEnd = ["CALLER_INCOMING", "CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
   const callerCanSkip = ["CALLER_INCOMING", "CALLER_CONNECTING"].includes(broadcastState);
+  const canReplayQueue = !callerCanEnd
+    && !hasQueuedCaller
+    && studioState.queue.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status))
+    && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"].includes(broadcastState);
   const canConnectAi = !sessionConnected && ["CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
   const stateLabel = broadcastState.replaceAll("_", " ");
   const nextStep = canStart
@@ -353,7 +374,9 @@ export function StudioClient({
           ? sessionConnected ? "Caller is on hold. Resume caller to put them back on air." : "Caller is on hold and needs browser voice. Connect the AI caller, then resume them."
           : callerIsLive
             ? sessionConnected ? "Caller is live. Speak naturally, then pause for their reply." : "The caller is on air but browser voice is not connected. Connect the AI caller, or use the mock line to test your speakers."
-              : "End the current call and the next caller will be prepared automatically.";
+              : canReplayQueue
+                ? "All callers have finished. Queue them all again for another rehearsal run."
+                : "End the current call and the next caller will be prepared automatically.";
   const primaryAction = canStart
     ? { label: "Start show", run: () => void control("START_SHOW") }
     : canCueNext
@@ -368,6 +391,8 @@ export function StudioClient({
               : { label: `Resume ${caller?.name ?? "caller"}`, run: () => void control("RESUME_CALLER") }
             : callerIsLive && !sessionConnected
               ? { label: "Connect AI caller", run: () => void connectAiCaller() }
+              : canReplayQueue
+                ? { label: "Run all callers again", run: () => void replayQueue() }
               : null;
 
   return <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,.8fr)]">
@@ -424,7 +449,7 @@ export function StudioClient({
             <label className="block"><span className="label">Caller volume</span><input className="mt-2 w-full accent-cyan-300" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => void changeVolume(Number(event.target.value))} /></label>
             <div className="grid grid-cols-2 gap-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">
               <div><span>Host mic</span><div className="mt-2 flex h-9 items-end gap-0.5 rounded bg-slate-900 px-1">{levels.inputBands.map((band, index) => <i key={index} className="min-w-0 flex-1 rounded-t bg-cyan-300 transition-[height] duration-75" style={{ height: `${Math.max(8, band * 100)}%`, opacity: 0.45 + band * 0.55 }} />)}</div></div>
-              <div><span>Caller output</span><div className="mt-2 flex h-9 items-end gap-0.5 rounded bg-slate-900 px-1">{levels.outputBands.map((band, index) => <i key={index} className="min-w-0 flex-1 rounded-t bg-rose-400 transition-[height] duration-75" style={{ height: `${Math.max(8, band * 100)}%`, opacity: 0.45 + band * 0.55 }} />)}</div></div>
+              <div><span>Caller output · live signal</span><div className="mt-2 flex h-9 items-end gap-0.5 rounded bg-slate-900 px-1" aria-label="Live caller output level">{levels.outputBands.map((band, index) => <i key={index} className="min-w-0 flex-1 rounded-t bg-rose-400 transition-[height] duration-75" style={{ height: `${Math.max(8, band * 100)}%`, opacity: 0.45 + band * 0.55 }} />)}</div></div>
             </div>
           </div>
         </div>
