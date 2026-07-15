@@ -1,6 +1,7 @@
 export type CallerSessionConfig = {
   callerId: string;
   showId: string;
+  testMode?: boolean;
   instructions: string;
   voiceId: string;
   inputDeviceId?: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Image as ImageIcon, Pencil, Save, X } from "lucide-react";
 import { CallerAvatarPicker } from "@/components/CallerAvatarPicker";
 import { CallerImageGenerator } from "@/components/CallerImageGenerator";
 
@@ -26,9 +27,23 @@ export function CallerEditor({ action, caller, submitLabel }: {
   const generation = object(caller?.generation);
   const portrait = caller?.assets?.find((asset) => asset.type === "PORTRAIT")?.url ?? "";
   const [portraitUrl, setPortraitUrl] = useState(portrait);
+  const [editing, setEditing] = useState(!caller);
   const selectedVoice = ({ "mock-warm-welsh": "coral", "mock-dry-welsh": "cedar", "mock-confident-welsh": "shimmer", "mock-gravel-welsh": "echo", "mock-keen-welsh": "ash" } as Record<string, string>)[string(performance.voiceId)] ?? string(performance.voiceId, "coral");
   const elevenLabsVoiceId = string(performance.elevenLabsVoiceId);
   const imagePrompt = `${caller?.firstName ?? "A fictional adult caller"}, ${caller?.location ?? "a local radio studio"}. ${caller?.issueHeadline ?? "A strange everyday complaint"}`;
+
+  if (caller && !editing) return <section className="panel panel-pad">
+    <div className="flex flex-wrap items-start justify-between gap-5">
+      <div className="flex min-w-0 items-start gap-4">
+        {portrait ? <img className="h-20 w-20 shrink-0 rounded-xl object-cover" src={portrait} alt="" /> : <div className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-slate-800 text-2xl font-black text-cyan-200">{caller.firstName?.slice(0, 1)}</div>}
+        <div className="min-w-0"><p className="eyebrow">Caller card</p><h2 className="mt-1 text-2xl font-black text-white">{caller.firstName} {caller.surnameInitial}</h2><p className="mt-1 text-sm text-slate-300">{caller.age ? `${caller.age} · ` : ""}{caller.location}{caller.occupation ? ` · ${caller.occupation}` : ""}</p>{caller.relationshipStatus && <p className="mt-1 text-xs text-slate-500">{caller.relationshipStatus}</p>}</div>
+      </div>
+      <button className="button-secondary" type="button" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> Edit caller</button>
+    </div>
+    <div className="mt-5 border-t border-slate-700/70 pt-5"><p className="text-lg font-bold text-white">{caller.issueHeadline}</p><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">{caller.openingSummary}</p></div>
+    <div className="mt-4 flex flex-wrap gap-2 text-xs">{Array.isArray(generation.topicTags) && generation.topicTags.filter((tag): tag is string => typeof tag === "string").map((tag) => <span key={tag} className="rounded-full bg-slate-800 px-3 py-1 text-slate-300">{tag}</span>)}</div>
+    <details className="mt-5 rounded-xl border border-slate-700/70 bg-slate-950/35 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-300">View private caller notes</summary><dl className="mt-4 grid gap-4 text-sm md:grid-cols-2"><div><dt className="label">Central want</dt><dd className="mt-1 text-slate-300">{string(character.centralWant, "Not set")}</dd></div><div><dt className="label">Story tension</dt><dd className="mt-1 text-slate-300">{string(character.comicContradiction, "Not set")}</dd></div><div><dt className="label">Speech style</dt><dd className="mt-1 text-slate-300">{string(character.speechStyle, "Not set")}</dd></div><div><dt className="label">Hidden truth</dt><dd className="mt-1 text-slate-300">{string(story.hiddenTruth, "Not set")}</dd></div></dl></details>
+  </section>;
 
   return <form action={action} className="space-y-6">
     <section className="panel panel-pad">
@@ -49,9 +64,15 @@ export function CallerEditor({ action, caller, submitLabel }: {
         <label><span className="label">Issue headline</span><input className="field" name="issueHeadline" defaultValue={caller?.issueHeadline} required /></label>
         <label><span className="label">Topic tags</span><input className="field" name="topicTags" defaultValue={Array.isArray(generation.topicTags) ? generation.topicTags.filter((tag): tag is string => typeof tag === "string").join(", ") : ""} placeholder="local life, technology, family" /><span className="mt-1 block text-xs text-slate-500">Optional. Used to organise the caller library and suggest visuals.</span></label>
         <label className="md:col-span-2"><span className="label">Opening summary</span><textarea className="field min-h-24" name="openingSummary" defaultValue={caller?.openingSummary} required /></label>
-        <div className="md:col-span-2"><CallerAvatarPicker defaultSeed={`${caller?.firstName ?? "new"}-${caller?.location ?? "caller"}`} onUseAsPortrait={setPortraitUrl} /></div>
-        <div className="md:col-span-2"><CallerImageGenerator defaultPrompt={imagePrompt} onUseAsPortrait={setPortraitUrl} /></div>
-        <details className="rounded-xl border border-slate-700 bg-slate-950/50 p-3 md:col-span-2"><summary className="cursor-pointer text-sm font-semibold text-slate-200">Use a custom image URL <span className="font-normal text-slate-500">(optional)</span></summary><label className="mt-3 block"><span className="label">Image URL</span><input className="field" name="portraitUrl" type="url" value={portraitUrl} onChange={(event) => setPortraitUrl(event.target.value)} placeholder="https://…" /><span className="mt-1 block text-xs text-slate-500">Only use this for an image you have the right to display. The avatar and AI image tools above fill this automatically.</span></label></details>
+        <details className="rounded-xl border border-slate-700 bg-slate-950/50 p-3 md:col-span-2" open={!caller}>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-200"><span className="inline-flex items-center gap-2"><ImageIcon className="h-4 w-4 text-cyan-300" /> Choose or generate caller graphic <span className="font-normal text-slate-500">(optional)</span></span></summary>
+          <div className="mt-4 space-y-3">
+            {portraitUrl && <div className="flex items-center gap-3 rounded-xl border border-slate-700/70 bg-slate-900/70 p-3"><img className="h-16 w-16 rounded-lg object-cover" src={portraitUrl} alt="Current caller portrait" /><div><p className="text-sm font-bold text-white">Current portrait</p><p className="mt-1 text-xs text-slate-400">Choose another option below or keep this one.</p></div></div>}
+            <details className="rounded-xl border border-slate-700/70 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-200">Avatar library</summary><div className="mt-3"><CallerAvatarPicker defaultSeed={`${caller?.firstName ?? "new"}-${caller?.location ?? "caller"}`} onUseAsPortrait={setPortraitUrl} /></div></details>
+            <details className="rounded-xl border border-slate-700/70 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-200">Generate an original portrait</summary><div className="mt-3"><CallerImageGenerator defaultPrompt={imagePrompt} onUseAsPortrait={setPortraitUrl} /></div></details>
+            <details className="rounded-xl border border-slate-700/70 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-200">Use a custom image URL</summary><label className="mt-3 block"><span className="label">Image URL</span><input className="field" name="portraitUrl" type="url" value={portraitUrl} onChange={(event) => setPortraitUrl(event.target.value)} placeholder="https://…" /><span className="mt-1 block text-xs text-slate-500">Only use an image you have the right to display.</span></label></details>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -71,6 +92,6 @@ export function CallerEditor({ action, caller, submitLabel }: {
         <label><span className="label">Suggested host questions (one per line)</span><textarea className="field min-h-28" name="suggestedQuestions" defaultValue={lines(hostSupport.suggestedQuestions)} required /></label>
       </div>
     </details>
-    <button className="button-primary" type="submit">{submitLabel}</button>
+    <div className="sticky bottom-3 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-300/30 bg-slate-950/95 p-3 shadow-2xl shadow-black/40 backdrop-blur"><p className="text-xs text-slate-400">Changes are not live until you save.</p><div className="flex gap-2">{caller && <button className="button-secondary" type="button" onClick={() => setEditing(false)}><X className="h-4 w-4" /> Cancel</button>}<button className="button-primary" type="submit"><Save className="h-4 w-4" /> {submitLabel}</button></div></div>
   </form>;
 }

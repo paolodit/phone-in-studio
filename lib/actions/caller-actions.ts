@@ -114,20 +114,6 @@ export async function saveCallerReviewAction(callerId: string, formData: FormDat
   revalidatePath("/callers");
 }
 
-export async function beginCallerRehearsalAction(callerId: string) {
-  await requireAdmin();
-  const caller = await prisma.caller.findUniqueOrThrow({ where: { id: callerId }, select: { status: true } });
-  await prisma.caller.update({
-    where: { id: callerId },
-    data: {
-      rehearsalCount: { increment: 1 },
-      ...(caller.status === CallerStatus.DRAFT || caller.status === CallerStatus.DEVELOPING ? { status: CallerStatus.REHEARSING } : {}),
-    },
-  });
-  revalidatePath(`/callers/${callerId}`);
-  revalidatePath("/callers");
-}
-
 export async function deleteCallerAction(callerId: string) {
   await requireAdmin();
   const queuedCount = await prisma.queueItem.count({ where: { callerId } });

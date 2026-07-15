@@ -141,6 +141,7 @@ export const showSetupSchema = z.object({
 export const realtimeSessionRequestSchema = z.object({
   showId: z.string().min(1),
   callerId: z.string().min(1),
+  testMode: z.boolean().optional().default(false),
 });
 
 export const realtimeCallRequestSchema = realtimeSessionRequestSchema.extend({

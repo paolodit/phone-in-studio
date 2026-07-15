@@ -149,7 +149,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     const answer = await fetch("/api/realtime/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ showId: config.showId, callerId: config.callerId, sdp: offer.sdp ?? "" }),
+      body: JSON.stringify({ showId: config.showId, callerId: config.callerId, testMode: config.testMode ?? false, sdp: offer.sdp ?? "" }),
     });
     const answerPayload = await answer.json().catch(() => null) as { sdp?: string; error?: string } | null;
     const closeFailedAttempt = async () => {

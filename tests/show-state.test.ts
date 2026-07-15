@@ -28,7 +28,7 @@ describe("show state machine", () => {
     expect(() => transitionShow(state, "CUE_NEXT", false)).toThrow(/not valid/);
   });
 
-  it("only allows a completed or idle display to reset for another rehearsal", () => {
+  it("only allows a completed or idle display to reset for another run", () => {
     expect(canResetShowForReplay("CALLER_ENDED")).toBe(true);
     expect(canResetShowForReplay("SHOW_ENDED")).toBe(true);
     expect(canResetShowForReplay("CALLER_LIVE")).toBe(false);

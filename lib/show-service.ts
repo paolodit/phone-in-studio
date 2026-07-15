@@ -217,7 +217,7 @@ export async function resetShowForReplay(showId: string) {
       data: {
         showId,
         type: "SHOW_RESET",
-        payload: { action: "RESET_FOR_REHEARSAL" } as Prisma.InputJsonValue,
+        payload: { action: "RESET_FOR_REPLAY" } as Prisma.InputJsonValue,
       },
     });
   });

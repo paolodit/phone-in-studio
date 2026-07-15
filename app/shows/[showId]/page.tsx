@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ExternalLink, ListOrdered, Mic2, Settings2 } from "lucide-react";
 import { LiveQueueAdder } from "@/components/LiveQueueAdder";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 import { ShowPreflight } from "@/components/ShowPreflight";
@@ -15,9 +16,10 @@ import { prisma } from "@/lib/prisma";
 import { canResetShowForReplay } from "@/lib/show-service";
 import { readShowFormatConfig, SHOW_FORMATS } from "@/lib/show-format";
 
-export default async function ShowDetailPage({ params }: { params: Promise<{ showId: string }> }) {
+export default async function ShowDetailPage({ params, searchParams }: { params: Promise<{ showId: string }>; searchParams: Promise<{ section?: string }> }) {
   await requireAdmin();
   const { showId } = await params;
+  const { section } = await searchParams;
   const [show, approvedCallers] = await Promise.all([
     prisma.show.findUniqueOrThrow({
       where: { id: showId },
@@ -43,18 +45,21 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ sho
     <StudioNav />
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <p className="eyebrow">Show / {show.status}</p>
+        <p className="eyebrow"><Link href="/shows" className="hover:text-cyan-200">Shows</Link> / {show.status}</p>
         <h1 className="title mt-1">{show.title}</h1>
         <p className="mt-2 text-sm text-slate-400">Broadcast state: {show.broadcastState.replaceAll("_", " ")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Link href={`/studio?show=${show.id}`} className="button-primary">Open Host Studio</Link>
-        <Link href={broadcastUrl} target="_blank" className="button-secondary">Open broadcast display</Link>
+        <Link href={`/studio?show=${show.id}`} className="button-primary"><Mic2 className="h-4 w-4" /> Open Studio</Link>
+        <Link href={broadcastUrl} target="_blank" className="button-secondary"><ExternalLink className="h-4 w-4" /> Broadcast output</Link>
       </div>
     </div>
 
-    <div className="mt-5 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-      <form action={updateShowAction.bind(null, show.id)} className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
+    <nav className="mt-5 flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-2" aria-label="Show workspace"><Link href={`/studio?show=${show.id}`} className="button-secondary"><Mic2 className="h-4 w-4" /> Studio</Link><Link href={`/shows/${show.id}#running-order`} className="button-primary"><ListOrdered className="h-4 w-4" /> Running order</Link><Link href={`/shows/${show.id}?section=options#show-options`} className="button-secondary"><Settings2 className="h-4 w-4" /> Options</Link></nav>
+
+    <details id="show-options" className="mt-5 scroll-mt-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4" open={section === "options"}>
+      <summary className="cursor-pointer list-none"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Show options</p><p className="mt-1 text-sm text-slate-400">Title, format, caller guidance, voice route and show-level actions</p></div><Settings2 className="h-5 w-5 text-slate-500" /></div></summary>
+      <form action={updateShowAction.bind(null, show.id)} className="mt-5 grid gap-3 border-t border-slate-700/70 pt-5 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
         <label><span className="label">Programme title</span><input className="field" name="title" defaultValue={show.title} required /></label>
         <label><span className="label">Show format</span><select className="field" name="formatId" defaultValue={formatConfig.formatId}>{SHOW_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.label}</option>)}</select></label>
         <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime</option><option value="elevenlabs">ElevenLabs Agent</option></select></label>
@@ -66,10 +71,10 @@ export default async function ShowDetailPage({ params }: { params: Promise<{ sho
         {canResetShowForReplay(show.broadcastState) && hasFinishedCallers && <form action={resetShowForReplayAction.bind(null, show.id)}><button className="button-secondary">Requeue every caller</button></form>}
         {show.status !== "LIVE" && <form action={deleteShowAction.bind(null, show.id)}><button className="button-danger">Delete show</button></form>}
       </div>
-    </div>
+    </details>
 
     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section className="panel panel-pad">
+      <section id="running-order" className="panel panel-pad scroll-mt-6">
         <div><p className="eyebrow">Live queue</p><h2 className="mt-1 text-lg font-bold text-white">Running order</h2></div>
         <QueueOrderEditor
           showId={show.id}

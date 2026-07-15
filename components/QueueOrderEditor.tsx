@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { RotateCcw } from "lucide-react";
 import { moveQueueEntry } from "@/lib/queue-order";
 
 export type QueueOrderItem = {
@@ -111,7 +112,7 @@ export function QueueOrderEditor({
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-800 text-xs font-bold">{item.position}</span>
         <div className="min-w-0 flex-1"><p className="font-semibold text-white">{item.name}</p><p className="truncate text-xs text-slate-400">{item.issue}</p></div>
         <span className="status bg-slate-800 text-slate-300">{item.status}</span>
-        {canReactivate && <button type="button" className="button-secondary !min-h-8 !w-8 !px-0 text-base" disabled={saving} onClick={() => void reactivate(item)} aria-label={`Reactivate ${item.name}`} title="Reactivate caller">↻</button>}
+        {canReactivate && <button type="button" className="button-secondary !min-h-8 !w-8 !px-0 text-base" disabled={saving} onClick={() => void reactivate(item)} aria-label={`Reactivate ${item.name}`} title="Reactivate caller"><RotateCcw className="h-4 w-4" /></button>}
       </div>;
     })}
     {items.length === 0 && <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">The running order is empty.</p>}

@@ -31,7 +31,7 @@ export class ElevenLabsAgentVoiceProvider implements LiveVoiceProvider {
     const response = await fetch("/api/elevenlabs/call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ showId: config.showId, callerId: config.callerId }),
+      body: JSON.stringify({ showId: config.showId, callerId: config.callerId, testMode: config.testMode ?? false }),
     });
     const payload = await response.json().catch(() => null) as (ElevenLabsSessionPayload & { error?: string }) | null;
     if (!response.ok || !payload?.conversationToken) throw new Error(payload?.error ?? "ElevenLabs could not start the caller session.");
@@ -47,7 +47,7 @@ export class ElevenLabsAgentVoiceProvider implements LiveVoiceProvider {
       conversationToken: payload.conversationToken,
       connectionType: "webrtc",
       inputDeviceId: config.inputDeviceId,
-      userId: `phone-in:${config.showId}:${config.callerId}`,
+      userId: `${config.testMode ? "caller-test" : "phone-in"}:${config.showId}:${config.callerId}`,
       dynamicVariables: payload.dynamicVariables,
       overrides: {
         agent: { prompt: { prompt: payload.instructions } },

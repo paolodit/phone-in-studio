@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ChevronDown, Mic, MicOff, RotateCcw } from "lucide-react";
 import type { CallerPremise, GeneratedCallerDraft } from "@/lib/schemas";
 
 type BusyAction = "premises" | "develop" | "save" | null;
@@ -34,6 +35,8 @@ export function CallerIdeaLab() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dictating, setDictating] = useState(false);
+  const [dictationDenied, setDictationDenied] = useState(false);
+  const [showOptions, setShowOptions] = useState(true);
   const recognitionRef = useRef<Dictation | null>(null);
 
   function toggleDictation() {
@@ -48,10 +51,15 @@ export function CallerIdeaLab() {
       const spoken = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
       if (spoken) setSourceNotes((current) => [current.trim(), spoken].filter(Boolean).join(current.trim() ? " " : ""));
     };
-    recognition.onerror = (event) => { setError(event.error === "not-allowed" ? "Microphone permission was not granted for dictation." : "Dictation stopped before a usable note was captured."); };
+    recognition.onerror = (event) => {
+      const denied = event.error === "not-allowed";
+      setDictationDenied(denied);
+      setError(denied ? "Microphone permission was not granted for dictation." : "Dictation stopped before a usable note was captured.");
+    };
     recognition.onend = () => { setDictating(false); recognitionRef.current = null; };
     recognitionRef.current = recognition;
     setError(null);
+    setDictationDenied(false);
     setDictating(true);
     recognition.start();
   }
@@ -66,6 +74,7 @@ export function CallerIdeaLab() {
       const result = await postJson<{ premises: CallerPremise[] }>("/api/caller-workshop/premises", { sourceNotes });
       setPremises(result.premises);
       setSelectedPremise(result.premises[0] ?? null);
+      setShowOptions(true);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to generate premises.");
     } finally {
@@ -81,7 +90,8 @@ export function CallerIdeaLab() {
     try {
       const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, premise: selectedPremise });
       setDraft(result.draft);
-      setNotice(`${result.draft.firstName}'s editable caller card is ready below. Review it, then save when you are happy.`);
+      setShowOptions(false);
+      setNotice(`${result.draft.firstName}'s editable caller card is ready.`);
       window.setTimeout(() => document.getElementById("caller-draft")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to develop this caller.");
@@ -100,7 +110,8 @@ export function CallerIdeaLab() {
     try {
       const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, premise });
       setDraft(result.draft);
-      setNotice(`${result.draft.firstName}'s editable caller card is ready below. Review it, then save when you are happy.`);
+      setShowOptions(false);
+      setNotice(`${result.draft.firstName}'s editable caller card is ready.`);
       window.setTimeout(() => document.getElementById("caller-draft")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to develop this caller.");
@@ -130,15 +141,17 @@ export function CallerIdeaLab() {
       <p className="eyebrow">Fast character pack</p>
       <h2 className="mt-1 text-xl font-bold text-white">Turn one seed into six ready-to-shape callers</h2>
       <p className="mt-2 max-w-3xl text-sm text-slate-300">Start with any show-worthy situation, view, story, prop, local texture or dilemma. The workshop creates fictional adult callers for any phone-in format; all outputs stay editable and unapproved.</p>
-      <div className="mt-5 flex items-end justify-between gap-3"><span className="label">Seed / source notes</span><button className="button-secondary !min-h-8 !px-3 text-xs" type="button" onClick={toggleDictation}>{dictating ? "Stop dictation" : "🎙 Dictate seed"}</button></div><textarea className="field mt-1 min-h-36" value={sourceNotes} onChange={(event) => { setSourceNotes(event.target.value); setPremises([]); setSelectedPremise(null); setDraft(null); setSavedDraft(null); setNotice(null); }} placeholder="For example: a caller believes a neighbourhood book-swap shelf is enforcing a bizarre hierarchy, but they have been quietly replacing the books they dislike." />
+      <div className="mt-5 flex items-end justify-between gap-3"><span className="label">Seed / source notes</span><button className="button-secondary !min-h-8 !px-3 text-xs" type="button" onClick={toggleDictation}>{dictating ? <><MicOff className="h-3.5 w-3.5" /> Stop dictation</> : <><Mic className="h-3.5 w-3.5" /> Dictate seed</>}</button></div><textarea className="field mt-1 min-h-36" value={sourceNotes} onChange={(event) => { setSourceNotes(event.target.value); setPremises([]); setSelectedPremise(null); setDraft(null); setSavedDraft(null); setNotice(null); setShowOptions(true); }} placeholder="For example: a caller believes a neighbourhood book-swap shelf is enforcing a bizarre hierarchy, but they have been quietly replacing the books they dislike." />
       <div className="mt-3 flex flex-wrap gap-2 text-xs"><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A caller wants advice after their neighbours have turned the communal garden into a booking system.")}>Advice dilemma</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A supporter insists their local club should retire a number after an unforgettable non-league cup run.")}>Sports opinion</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A caller tells the host about the small decision that accidentally started a surprisingly intense family tradition.")}>Personal story</button></div>
       <div className="mt-4 flex flex-wrap items-center gap-3"><button className="button-primary" type="button" onClick={generatePremises} disabled={busy !== null || sourceNotes.trim().length < 12}>{busy === "premises" ? "Finding angles..." : "Generate six options"}</button><span className="text-xs text-slate-500">Nothing is saved until you choose Save draft.</span></div>
     </section>
 
-    {error && <div role="alert" className="rounded-xl border border-red-400/50 bg-red-950/50 px-4 py-3 text-sm text-red-100">{error}</div>}
-    {notice && <div role="status" className="rounded-xl border border-cyan-300/40 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">{notice}</div>}
+    {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-950/35 px-4 py-3 text-sm text-rose-100"><div><p>{error}</p>{dictationDenied && <p className="mt-1 text-xs text-rose-100/70">If it remains blocked, use the site controls beside the address bar to allow Microphone, then try again.</p>}</div>{dictationDenied && <button className="button-secondary !min-h-8 !px-3 text-xs" type="button" onClick={toggleDictation}><RotateCcw className="h-3.5 w-3.5" /> Try microphone again</button>}</div>}
+    {notice && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-300/40 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50"><span>{notice} Review the caller card and save it when ready.</span><a className="button-secondary !min-h-8 !px-3 text-xs" href="#caller-draft">Review caller card <ChevronDown className="h-3.5 w-3.5" /></a></div>}
 
-    {premises.length > 0 && <section className="space-y-4">
+    {premises.length > 0 && draft && !showOptions && <section className="panel panel-pad flex flex-wrap items-center justify-between gap-4"><div><p className="eyebrow">Chosen direction</p><p className="mt-1 font-bold text-white">{selectedPremise?.title}</p><p className="mt-1 text-sm text-slate-400">The six-option pack is tucked away while you work on this caller.</p></div><button className="button-secondary" type="button" onClick={() => setShowOptions(true)}>Compare the six options</button></section>}
+
+    {premises.length > 0 && (!draft || showOptions) && <section className="space-y-4">
       <div><p className="eyebrow">Choose a direction</p><h2 className="mt-1 text-xl font-bold text-white">Pick an option, then build its caller card</h2><p className="mt-1 text-sm text-slate-400">The cards start compact so you can scan the pack quickly. Open producer detail only when you need the deeper shape.</p></div>
       <div className="grid gap-4 lg:grid-cols-2">{premises.map((premise, index) => {
         const isSelected = selectedPremise?.title === premise.title;
@@ -147,10 +160,10 @@ export function CallerIdeaLab() {
           <p className="mt-3 text-sm text-slate-200">{premise.setup}</p>
           <p className="mt-3 text-sm text-cyan-100"><b>Caller view:</b> {premise.callerPointOfView}</p>
           <details className="mt-3 rounded-lg bg-slate-950/60 p-3 text-sm"><summary className="cursor-pointer font-bold text-slate-300">Producer detail</summary><dl className="mt-3 grid gap-3"><div><dt className="label">Story tension</dt><dd className="mt-1 text-slate-300">{premise.comicContradiction}</dd></div><div><dt className="label">Host route</dt><dd className="mt-1 text-slate-300">{premise.hostChallenge}</dd></div><div><dt className="label">Escalation</dt><dd className="mt-1 text-slate-300">{premise.escalationPossibility}</dd></div><div><dt className="label">Originality check</dt><dd className="mt-1 text-amber-200">{premise.originalityWarning}</dd></div></dl></details>
-          <button className="button-primary mt-4 w-full" type="button" onClick={() => void developPremise(premise)} disabled={busy !== null}>{busy === "develop" && isSelected ? "Building caller…" : "Build this caller"}</button>
+          <button className="button-primary mt-4 w-full" type="button" onClick={() => void developPremise(premise)} disabled={busy !== null}>{busy === "develop" && isSelected ? "Building caller…" : draft && isSelected ? "Rebuild this caller" : "Build this caller"}</button>
         </article>;
       })}</div>
-      <div className="panel panel-pad flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold text-white">{selectedPremise ? selectedPremise.title : "Select an option"}</p><p className="mt-1 text-sm text-slate-400">Want to compare before committing? Select an option, then build it here.</p></div><button className="button-secondary" type="button" onClick={developSelectedPremise} disabled={!selectedPremise || busy !== null}>{busy === "develop" ? "Building caller..." : "Build selected caller"}</button></div>
+      <div className="panel panel-pad flex flex-wrap items-center justify-between gap-4"><div><p className="font-bold text-white">{selectedPremise ? selectedPremise.title : "Select an option"}</p><p className="mt-1 text-sm text-slate-400">Select a direction, then build its editable caller card.</p></div><button className="button-secondary" type="button" onClick={developSelectedPremise} disabled={!selectedPremise || busy !== null}>{busy === "develop" ? "Building caller..." : draft ? "Rebuild selected caller" : "Build selected caller"}</button></div>
     </section>}
 
     {draft && <section id="caller-draft" className="space-y-4">

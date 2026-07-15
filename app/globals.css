@@ -11,14 +11,14 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 a { color: inherit; }
 
 @layer components {
-  .shell { @apply mx-auto min-h-screen max-w-[1600px] px-4 py-5 md:px-8; }
+  .shell { @apply mx-auto min-h-screen max-w-[1600px] px-4 py-5 md:px-8 lg:pl-28; }
   .panel { @apply rounded-2xl border border-slate-700/70 bg-slate-900/80 shadow-xl shadow-black/10; }
   .panel-pad { @apply p-4 md:p-5; }
   .eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-300; }
   .title { @apply text-2xl font-semibold tracking-tight text-white md:text-3xl; }
   .field { @apply mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400; }
   .label { @apply text-xs font-semibold uppercase tracking-wide text-slate-300; }
-  .button { @apply inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-bold transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-cyan-300; }
+  .button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-cyan-300; }
   .button-primary { @apply button bg-cyan-400 text-slate-950; }
   .button-secondary { @apply button bg-slate-700 text-white; }
   .button-danger { @apply button border border-rose-400/25 bg-rose-950/70 text-rose-100 hover:bg-rose-900/80; }

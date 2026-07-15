@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AudioLines, Images } from "lucide-react";
 import type { BroadcastSnapshot } from "@/lib/public-show";
 import type { StudioControlAction } from "@/lib/schemas";
 import type { StudioState } from "@/lib/studio-state";
@@ -256,7 +257,7 @@ export function StudioClient({
           await connectRealtime(true);
         } catch (error) {
           setVoiceStatus("AI caller not connected");
-          setMessage(error instanceof Error ? `${error.message} The caller is still waiting; use Connect AI caller to retry or Use mock caller to continue a rehearsal.` : "The caller is still waiting. Use Connect AI caller to retry or Use mock caller to continue a rehearsal.");
+          setMessage(error instanceof Error ? `${error.message} The caller is still waiting; use Connect AI caller to retry or Use mock caller to continue the run.` : "The caller is still waiting. Use Connect AI caller to retry or Use mock caller to continue the run.");
         }
       } else if (action === "MOCK_SPEAK") {
         playMockCaller();
@@ -435,7 +436,7 @@ export function StudioClient({
           : callerIsLive
             ? sessionConnected ? "Caller is live. Speak naturally, then pause for their reply." : `The caller is on air but browser voice is not connected. ${connectButtonLabel}, or use the mock line to test your speakers.`
               : canReplayQueue
-                ? "All callers have finished. Queue them all again for another rehearsal run."
+                ? "All callers have finished. Queue them all again for another run."
                 : "End the current call and the next caller will be prepared automatically.";
   const primaryAction = canStart
     ? { label: "Start show", run: () => void control("START_SHOW") }
@@ -522,7 +523,7 @@ export function StudioClient({
     <aside className="space-y-5">
       <div className="panel panel-pad"><p className="eyebrow">Up next</p><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
       <div className="panel panel-pad">
-        <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals">▣ Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard">♪ Sounds</button></div></div>
+        <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals"><Images className="h-3.5 w-3.5" /> Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard"><AudioLines className="h-3.5 w-3.5" /> Sounds</button></div></div>
         {mediaPane === "visuals"
           ? <><p className="mt-2 text-xs text-slate-400">Choose an image to send it to the broadcast display. Newly added caller visuals are available immediately.</p><div className="mt-3 grid grid-cols-2 gap-2">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void triggerVisual(asset.id)} className="aspect-video overflow-hidden rounded-lg border border-slate-700 bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400"><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></>
           : <><p className="mt-2 text-xs text-slate-400">Incoming, connection and host hang-up tones run automatically. These are optional host triggers.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { playSynthCue("cheer"); setMessage("Played optional cheer cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Cheer [C]</button><button type="button" onClick={() => { playSynthCue("horn"); setMessage("Played optional horn cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Horn [H]</button><button type="button" onClick={() => { playSynthCue("rimshot"); setMessage("Played optional rimshot cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Rimshot [R]</button><button type="button" onClick={() => { playSynthCue("callerHangup"); setMessage("Played caller hang-up cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Caller hangs up [G]</button>{studioState.soundEffects.map((effect) => <div key={effect.id} className="rounded-lg border border-slate-700 bg-slate-950 p-2"><button type="button" onClick={() => void playSound(effect)} className="w-full text-left text-xs font-bold text-slate-100 hover:text-cyan-200">Play {effect.label}{effect.hotkey ? ` [${effect.hotkey}]` : ""}</button><button type="button" onClick={() => stopSound(effect.id)} className="mt-2 text-[10px] font-bold uppercase text-slate-500">Stop</button></div>)}</div><p className="mt-3 text-xs text-slate-500">Add URL-based custom cues and a one-character hotkey from the show page.</p></>}

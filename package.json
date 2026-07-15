@@ -15,7 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:local:init": "node scripts/local-dev-database.mjs init",
-    "db:local:stop": "node scripts/prisma-dev.mjs stop --name ai-phone-in",
+    "db:local:stop": "node scripts/prisma-dev.mjs stop ai-phone-in",
     "verify:local": "node scripts/local-dev-database.mjs verify",
     "verify:realtime": "node scripts/local-dev-database.mjs realtime"
   },
@@ -26,6 +26,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "dotenv": "^17.4.2",
+    "lucide-react": "^1.24.0",
     "next": "^15.5.18",
     "pg": "^8.22.0",
     "react": "19.1.1",
