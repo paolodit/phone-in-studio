@@ -69,6 +69,8 @@ export function createCallerSnapshot(caller: Caller & { assets: CallerAsset[] })
       type: asset.type,
       label: asset.label,
       url: asset.url,
+      creditText: asset.creditText,
+      creditUrl: asset.creditUrl,
       trigger: asset.trigger,
       manualHotkey: asset.manualHotkey,
       priority: asset.priority,

@@ -253,6 +253,8 @@ export async function applyBroadcastVisual(showId: string, assetId: string | nul
                 type: latestAsset.type,
                 label: latestAsset.label,
                 url: latestAsset.url,
+                creditText: latestAsset.creditText,
+                creditUrl: latestAsset.creditUrl,
                 trigger: latestAsset.trigger,
                 manualHotkey: latestAsset.manualHotkey,
                 priority: latestAsset.priority,

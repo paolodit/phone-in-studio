@@ -71,7 +71,7 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
 
   const safetyIdentifier = createHmac("sha256", process.env.AUTH_SECRET ?? "development-only").update(caller.id).digest("hex").slice(0, 24);
   return {
-    model: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1",
+    model: process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-1.5",
     instructions,
     // Realtime’s stable session configuration, passed into the server-created ephemeral session.
     output_modalities: ["audio"],
@@ -79,7 +79,12 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
       input: {
         noise_reduction: { type: "near_field" },
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
-        turn_detection: { type: "server_vad", create_response: true, interrupt_response: true, prefix_padding_ms: 300, silence_duration_ms: 450 },
+        // Semantic VAD waits for a meaningful end-of-turn instead of treating
+        // every short pause as a hand-off. High eagerness keeps replies quick.
+        // Automatic barge-in stays off because incidental room noise can be
+        // mistaken for speech and cancel a caller mid-answer; the host has a
+        // deliberate Interrupt/Space control for reliable barge-in instead.
+        turn_detection: { type: "semantic_vad", eagerness: "high", create_response: true, interrupt_response: false },
       },
       output: { voice: safeVoice(performance.voiceId), speed: speechSpeed(performance.pacing) },
     },

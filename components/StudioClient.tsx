@@ -8,6 +8,7 @@ import type { StudioState } from "@/lib/studio-state";
 import type { LiveVoiceSession } from "@/lib/voice/types";
 import type { VoiceProviderId } from "@/lib/show-format";
 import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provider";
+import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 
@@ -79,7 +80,7 @@ export function StudioClient({
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
   const caller = studioState.caller;
   const visualAssets = caller?.assets.filter((asset) => asset.type === "SUPPORTING_VISUAL") ?? [];
-  const voiceProviderLabel = voiceProvider === "elevenlabs" ? "ElevenLabs Agent" : "OpenAI Realtime";
+  const voiceProviderLabel = voiceProvider === "gemini" ? "Gemini Live" : voiceProvider === "elevenlabs" ? "ElevenLabs Agent" : "OpenAI Realtime";
 
   const refreshStudio = useCallback(async () => {
     const response = await fetch(`/api/shows/${showId}/studio-state`, { cache: "no-store" });
@@ -156,7 +157,7 @@ export function StudioClient({
   const connectRealtime = useCallback(async (updateBroadcastState: boolean) => {
     if (!caller) throw new Error("Cue a caller before connecting a voice session.");
     setVoiceStatus(`Connecting to ${voiceProviderLabel}…`);
-    const provider = voiceProvider === "elevenlabs" ? new ElevenLabsAgentVoiceProvider() : new OpenAIWebRtcVoiceProvider();
+    const provider = voiceProvider === "gemini" ? new GeminiLiveVoiceProvider() : voiceProvider === "elevenlabs" ? new ElevenLabsAgentVoiceProvider() : new OpenAIWebRtcVoiceProvider();
     const session = await provider.createSession({
       showId,
       callerId: caller.id,
@@ -421,7 +422,7 @@ export function StudioClient({
     && studioState.queue.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status))
     && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"].includes(broadcastState);
   const canConnectAi = !sessionConnected && ["CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
-  const connectButtonLabel = `Connect ${voiceProvider === "elevenlabs" ? "ElevenLabs" : "OpenAI"} caller`;
+  const connectButtonLabel = `Connect ${voiceProvider === "gemini" ? "Gemini" : voiceProvider === "elevenlabs" ? "ElevenLabs" : "OpenAI"} caller`;
   const stateLabel = broadcastState.replaceAll("_", " ");
   const nextStep = canStart
     ? "Start the show to open the line."
@@ -503,8 +504,10 @@ export function StudioClient({
           <div>
             <p className="label">Voice session</p>
             <p className="mt-1 text-sm text-cyan-200">{voiceStatus}</p>
-            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime</option><option value="elevenlabs">ElevenLabs Agent</option></select></label>
+            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option></select></label>
             <p className="mt-2 text-xs text-amber-200">Use headphones during live calls to prevent feedback. Live browser audio needs Chrome or Edge at <b>http://localhost:3000</b> or an HTTPS URL; HTTP on a LAN/IP address cannot use the microphone.</p>
+            {voiceProvider === "openai" && <p className="mt-2 text-xs text-slate-400">Room noise will not automatically cut off the caller. Press <b>Space</b> or use <b>Interrupt</b> when you want to speak over them.</p>}
+            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini uses conservative speech-start detection to reject more room noise, while retaining natural voice barge-in. The deliberate Interrupt control clears queued caller audio immediately.</p>}
             {voiceProvider === "elevenlabs" && <p className="mt-2 text-xs text-slate-400">ElevenLabs uses your configured Agent with a short-lived WebRTC token. Set its API key and Agent ID in <code>.env.local</code>; use the caller editor to optionally give an individual caller a voice ID.</p>}
           </div>
           <div className="space-y-2">

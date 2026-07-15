@@ -13,8 +13,15 @@ describe("Realtime caller session configuration", () => {
       hostSupport: { suggestedQuestions: ["Who is admin?"], challengePoints: ["You chose it"] }, generation: null, quality: null, rehearsalCount: 0, producerNotes: null, approvedAt: null, approvedBy: null, createdAt: new Date(), updatedAt: new Date(),
     } as unknown as Caller;
     const config = buildRealtimeSessionConfig(caller);
+    expect(config.model).toBe(process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-1.5");
     expect(config.output_modalities).toEqual(["audio"]);
     expect(config.audio.output.voice).toBe("marin");
+    expect(config.audio.input.turn_detection).toEqual({
+      type: "semantic_vad",
+      eagerness: "high",
+      create_response: true,
+      interrupt_response: false,
+    });
     expect(config.instructions).toContain("Stop output immediately");
     expect(JSON.stringify(config)).not.toContain("OPENAI_API_KEY");
   });

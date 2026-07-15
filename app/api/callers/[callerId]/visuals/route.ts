@@ -16,6 +16,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cal
       type: "SUPPORTING_VISUAL",
       label: input.label,
       url: input.url,
+      creditText: input.creditText,
+      creditUrl: input.creditUrl,
       manualHotkey: input.manualHotkey,
     } });
     return NextResponse.json({ assetId: asset.id }, { status: 201 });

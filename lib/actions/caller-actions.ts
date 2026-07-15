@@ -127,7 +127,7 @@ export async function addSupportingVisualAction(callerId: string, formData: Form
   await requireAdmin();
   const input = callerAssetFormSchema.parse(formToObject(formData));
   await prisma.callerAsset.create({
-    data: { callerId, type: "SUPPORTING_VISUAL", label: input.label, url: input.url, manualHotkey: input.manualHotkey },
+    data: { callerId, type: "SUPPORTING_VISUAL", label: input.label, url: input.url, creditText: input.creditText, creditUrl: input.creditUrl, manualHotkey: input.manualHotkey },
   });
   revalidatePath(`/callers/${callerId}`);
 }
@@ -145,8 +145,10 @@ export async function prepareTopicVisualsAction(callerId: string) {
     await tx.callerAsset.createMany({ data: selected.map((image, index) => ({
       callerId,
       type: "SUPPORTING_VISUAL",
-      label: `${image.provider === "pexels" ? "Pexels" : "Pixabay"}: ${image.alt}`.slice(0, 120),
+      label: image.alt.slice(0, 120),
       url: image.imageUrl,
+      creditText: `${image.creator} · ${image.provider === "pexels" ? "Pexels" : "Pixabay"}`.slice(0, 160),
+      creditUrl: image.sourceUrl,
       manualHotkey: String(index + 1),
       priority: index + 1,
     })) });

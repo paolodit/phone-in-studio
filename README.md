@@ -15,13 +15,14 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-2563eb?logo=typescript&logoColor=white" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Prisma-334155?logo=postgresql&logoColor=white" />
   <img alt="OpenAI Realtime" src="https://img.shields.io/badge/Voice-OpenAI_Realtime-0f766e" />
+  <img alt="Gemini Live optional" src="https://img.shields.io/badge/Voice-Gemini_Live_optional-1d4ed8" />
   <img alt="ElevenLabs optional" src="https://img.shields.io/badge/Voice-ElevenLabs_optional-4c1d95" />
 </p>
 
 </div>
 
 > [!IMPORTANT]
-> This repository is a usable local development build. The core caller, show, Studio, voice and broadcast workflows work. It is not yet a hardened public multi-user service; review [what remains](#what-remains) before using it for a public stream.
+> This is a hobbyist-first, local production toolkit. One trusted admin can build callers, run shows and open the same show from a second producer browser. It deliberately avoids enterprise account and team-management infrastructure so the live workflow stays approachable.
 
 ## The production flow
 
@@ -47,13 +48,15 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Manual caller creation, approval, archive and topic-tag workflows.
 - Selectable generated avatars, OpenAI image generation, Pexels and Pixabay visuals.
 - Private caller soundchecks that cannot alter the live queue or programme output.
-- OpenAI Realtime browser voice with host/caller meters and transcripts.
+- OpenAI Realtime 1.5 browser voice as the default, with host/caller meters and transcripts.
+- Optional Gemini Live routing with server-minted one-use browser credentials, native audio and adjustable VAD.
 - Optional ElevenLabs Conversational AI routing and per-caller voice IDs.
 - Drag-and-drop running orders, caller reactivation and additions during a live show.
 - Automatic incoming, connected and host hang-up tones.
 - Optional cheer, horn, rimshot and custom soundboard cues.
-- Full-screen and overlay broadcast modes for browser-source capture.
+- Adaptive web, TikTok 9:16, Twitch/OBS 16:9 and transparent overlay output modes.
 - A caller-output EQ shared with the broadcast display.
+- Photographer/contributor attribution retained from stock search to the live output.
 - Privacy-filtered broadcast data that excludes private caller mechanics and API keys.
 
 ## Quick start
@@ -107,9 +110,12 @@ All provider credentials remain server-side. Never commit `.env.local`.
 | `ADMIN_PASSWORD` | Yes | Password for the local admin login. |
 | `AUTH_SECRET` | Yes | Signs the HTTP-only admin session cookie. Use a long, unique value. |
 | `OPENAI_API_KEY` | Recommended | Caller Workshop, OpenAI Realtime and AI image generation. |
-| `OPENAI_REALTIME_MODEL` | No | Overrides the default Realtime model. |
+| `OPENAI_REALTIME_MODEL` | No | Overrides the default `gpt-realtime-1.5` voice model. |
 | `OPENAI_CALLER_GENERATION_MODEL` | No | Overrides the Caller Workshop model. |
 | `OPENAI_IMAGE_MODEL` | No | Overrides the image-generation model. |
+| `GEMINI_API_KEY` | No | Enables the Gemini Live comparison route. |
+| `GEMINI_LIVE_MODEL` | No | Overrides `gemini-3.1-flash-live-preview`. |
+| `GEMINI_LIVE_VOICE` | No | Forces one Gemini prebuilt voice instead of mapping caller voices. |
 | `ELEVENLABS_API_KEY` | No | Enables the ElevenLabs Conversational AI route. |
 | `ELEVENLABS_AGENT_ID` | No | Selects the ElevenLabs Agent used for conversations. |
 | `PEXELS_API_KEY` | No | Enables Pexels topic-image search. |
@@ -135,7 +141,7 @@ Caller graphics can come from the stored avatar library, a custom image URL, Ope
 
 Open a caller and choose **Test voice privately**.
 
-The soundcheck supports OpenAI Realtime or ElevenLabs, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
+The soundcheck supports OpenAI Realtime, Gemini Live or ElevenLabs, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
 
 This test route does not update a show, running order, production event log or live broadcast display. Use headphones, hear the opening line, speak naturally and pause for the reply.
 
@@ -145,7 +151,7 @@ Open **Shows**, choose **New show**, then configure:
 
 - programme title and format;
 - show-level caller guidance;
-- OpenAI Realtime or ElevenLabs voice routing;
+- OpenAI Realtime, Gemini Live or ElevenLabs voice routing;
 - approved callers and their running order;
 - custom sound cues and shortcuts;
 - the private broadcast-output link.
@@ -164,19 +170,36 @@ Each show owns its own Studio, running order, options and output.
 
 There is no redundant second step to fetch the next caller after ending a call. The next caller is prepared automatically, while the host controls the exact moment they go on air.
 
-## Two-producer operation
+## Simple two-producer operation
 
 Keep the **Host Studio** open for the presenter and the relevant **show workspace** open for a producer in another browser or computer.
 
-The producer can create and approve new callers and add them to the end of the running order while the host continues the current call. The Studio refreshes its queue without interrupting live caller audio. This currently shares database state but does not yet provide producer presence, edit locks or conflict warnings.
+The producer can create and approve new callers and add them to the running order while the host continues the current call. The Studio refreshes its queue without interrupting live caller audio.
+
+Both browsers intentionally use the same trusted local admin. Avoid editing the same caller or running order at exactly the same moment; proper organisation accounts, invitations, presence and role management are outside this hobbyist-first scope.
 
 ## Voice routes
 
 ### OpenAI Realtime
 
-The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser.
+The default is `gpt-realtime-1.5`. The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser. Turn-taking uses high-eagerness semantic VAD so the caller responds promptly at a meaningful end-of-turn. Automatic barge-in is disabled to prevent incidental room noise cancelling a caller mid-answer; the host uses **Interrupt** or the **Space** shortcut for a deliberate cut-in.
 
 Each caller can have a supported voice, pace, speech style, response length and interruption behaviour. Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
+
+### Gemini Live
+
+Set `GEMINI_API_KEY`, restart the app, then select **Gemini Live** in Show options or the private soundcheck. The adapter currently targets `gemini-3.1-flash-live-preview` and uses Google's official `@google/genai` SDK.
+
+The permanent key remains server-side. The server creates a one-use, one-minute connection credential whose session configuration is locked to the selected caller. Browser audio is sent as PCM; Gemini audio is played through the same caller-output meter and broadcast EQ used by the other providers.
+
+The current comparison settings use:
+
+- low speech-start sensitivity to reject more incidental room noise;
+- high speech-end sensitivity with 360 ms silence for a quicker hand-off;
+- automatic voice barge-in plus the Studio's explicit **Interrupt** control;
+- minimal thinking, audio input/output transcripts and a short caller response budget.
+
+This is an optional preview route, not a promise that it will outperform OpenAI in every room. Test with the actual microphone, headphones and ambient noise you intend to use. Gemini Live sessions and preview model availability are provider constraints; see Google's [Live API guide](https://ai.google.dev/gemini-api/docs/live-api) and [ephemeral-token guidance](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).
 
 ### ElevenLabs Conversational AI
 
@@ -191,11 +214,21 @@ Open **Broadcast output** from a show workspace. Its URL contains an unguessable
 Recommended OBS setup:
 
 1. Add the output URL as a Browser Source.
-2. Start with a 1920 x 1080 source for the full layout.
-3. Use `mode=full` for the complete display.
-4. Use `mode=overlay` for a transparent lower-third treatment.
-5. Capture the host microphone separately.
-6. Capture Studio browser audio for AI callers and sound cues.
+2. Treat the browser source as one content pane in your scene; the app does not assume or reserve a host-webcam object.
+3. Use `layout=twitch` at 1920 x 1080 for a wide Twitch/OBS pane.
+4. Use `layout=tiktok` at 1080 x 1920 for a portrait TikTok Live Studio pane.
+5. Use `layout=web` when the pane may resize; it switches composition from its actual aspect ratio.
+6. Use `mode=overlay` for a transparent treatment; layout defaults to `web`.
+7. Capture the host microphone separately, then capture Studio browser audio for AI callers and sound cues.
+
+Example URLs (retain the show's real token):
+
+```text
+/broadcast/SHOW_ID?token=TOKEN&mode=full&layout=web
+/broadcast/SHOW_ID?token=TOKEN&mode=full&layout=tiktok
+/broadcast/SHOW_ID?token=TOKEN&mode=full&layout=twitch
+/broadcast/SHOW_ID?token=TOKEN&mode=overlay
+```
 
 The broadcast page does not emit the host microphone. Its EQ is driven by caller output reported by the Studio, so it should move only while the AI caller is producing audio.
 
@@ -203,12 +236,12 @@ The broadcast page does not emit the host microphone. Its EQ is driven by caller
 
 - `.env.local` is server-only and must not be committed.
 - The admin session uses an HTTP-only signed cookie.
-- Permanent OpenAI and ElevenLabs keys are never returned to the browser.
+- Permanent OpenAI, Gemini and ElevenLabs keys are never returned to the browser.
 - The broadcast API exposes only public identity, public issue, caller graphic and the selected visual.
 - Hidden story details, private prompts and producer notes remain inside authenticated tools.
 - Generated and stock images still require editorial, licensing and broadcast-safety review.
 
-For a public deployment, replace the shared local admin login with user accounts, role enforcement, audit controls, TLS, managed secrets and backed-up PostgreSQL.
+For an internet-facing deployment, still add TLS, managed secrets, database backups and network access controls. The shared-admin workflow is intentional; this project is not trying to become a team SaaS account system.
 
 ## Commands
 
@@ -259,6 +292,12 @@ For a new checkout, run `npm run db:local:init` once first.
 </details>
 
 <details>
+<summary><strong>Gemini Live cannot start a caller</strong></summary>
+
+Confirm `GEMINI_API_KEY` is present in `.env.local`, restart the app, and use a Gemini project with Live API access. Every attempt creates a fresh credential, so reconnect rather than reusing a failed session. If a preview model has changed, override `GEMINI_LIVE_MODEL` with a model supported by your project.
+</details>
+
+<details>
 <summary><strong>ElevenLabs cannot start a caller</strong></summary>
 
 Confirm that the API key and Agent ID belong to the same account and that the Agent supports WebRTC conversations. Restart the app after changing `.env.local`.
@@ -276,13 +315,13 @@ tests/                State, queue, prompt, generation and voice tests
 public/               Bundled caller and interface assets
 ```
 
-## What remains
+## Sensible next steps
 
-- Proper producer accounts, roles, presence, edit locks and conflict handling.
-- Dedicated 9:16, 1:1 and platform-safe-area broadcast presets.
+- Real-room comparison and tuning across OpenAI 1.5, Gemini Live and ElevenLabs.
+- A 1:1 output preset plus user-adjustable safe areas and theme controls.
 - Managed deployment, secrets, PostgreSQL backups and operational monitoring.
-- More robust audio reconnection and provider failure recovery.
-- A reusable media library with stronger attribution management.
+- More robust audio reconnection, device switching and provider failover.
+- A reusable media library, attribution backfill for old assets and licence-review notes.
 - Optional SIP or PSTN integration for real telephone lines.
 - End-to-end browser automation for Studio and broadcast interactions.
 

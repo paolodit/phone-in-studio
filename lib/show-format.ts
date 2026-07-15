@@ -9,7 +9,7 @@ export const SHOW_FORMATS = [
 ] as const;
 
 export type ShowFormatId = typeof SHOW_FORMATS[number]["id"];
-export type VoiceProviderId = "openai" | "elevenlabs";
+export type VoiceProviderId = "openai" | "gemini" | "elevenlabs";
 
 export type ShowFormatConfig = {
   programmeName: string;
@@ -33,7 +33,7 @@ export function readShowFormatConfig(brandingConfig: unknown, fallbackTitle: str
     formatId: format.id,
     formatLabel: format.label,
     formatGuidance: typeof config.formatGuidance === "string" && config.formatGuidance.trim() ? config.formatGuidance : format.guidance,
-    voiceProvider: config.voiceProvider === "elevenlabs" ? "elevenlabs" : "openai",
+    voiceProvider: config.voiceProvider === "gemini" ? "gemini" : config.voiceProvider === "elevenlabs" ? "elevenlabs" : "openai",
   };
 }
 
@@ -45,6 +45,6 @@ export function buildShowFormatConfig(input: { title: string; formatId?: string;
     formatId: format.id,
     formatLabel: format.label,
     formatGuidance: input.formatGuidance?.trim() || current.formatGuidance || format.guidance,
-    voiceProvider: input.voiceProvider === "elevenlabs" ? "elevenlabs" : "openai",
+    voiceProvider: input.voiceProvider === "gemini" ? "gemini" : input.voiceProvider === "elevenlabs" ? "elevenlabs" : "openai",
   };
 }

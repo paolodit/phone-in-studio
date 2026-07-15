@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, ListOrdered, Mic2, Settings2 } from "lucide-react";
+import { ExternalLink, ListOrdered, Mic2, Monitor, Settings2, Smartphone } from "lucide-react";
 import { LiveQueueAdder } from "@/components/LiveQueueAdder";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 import { ShowPreflight } from "@/components/ShowPreflight";
@@ -37,7 +37,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       select: { id: true, firstName: true, surnameInitial: true, issueHeadline: true },
     }),
   ]);
-  const broadcastUrl = `/broadcast/${show.id}?token=${show.broadcastToken}&mode=full`;
+  const broadcastUrl = `/broadcast/${show.id}?token=${show.broadcastToken}&mode=full&layout=web`;
   const hasFinishedCallers = show.queueItems.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status));
   const formatConfig = readShowFormatConfig(show.brandingConfig, show.title);
 
@@ -62,16 +62,25 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       <form action={updateShowAction.bind(null, show.id)} className="mt-5 grid gap-3 border-t border-slate-700/70 pt-5 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
         <label><span className="label">Programme title</span><input className="field" name="title" defaultValue={show.title} required /></label>
         <label><span className="label">Show format</span><select className="field" name="formatId" defaultValue={formatConfig.formatId}>{SHOW_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.label}</option>)}</select></label>
-        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime</option><option value="elevenlabs">ElevenLabs Agent</option></select></label>
+        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option></select></label>
         <button className="button-secondary" type="submit">Save setup</button>
         <label className="lg:col-span-3"><span className="label">Format guidance for AI callers</span><textarea className="field min-h-20" name="formatGuidance" defaultValue={formatConfig.formatGuidance} placeholder="Give callers the tone, host relationship and purpose of this format." /></label>
-        <p className="text-xs leading-5 text-slate-400">Use an ElevenLabs Agent only after adding <code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code> locally. The API key stays server-side and every live session gets a short-lived browser token.</p>
+        <p className="text-xs leading-5 text-slate-400">Gemini Live needs <code>GEMINI_API_KEY</code>. ElevenLabs needs <code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code>. Permanent keys stay server-side; each browser connection uses a short-lived credential.</p>
       </form>
       <div className="mt-3 flex flex-wrap gap-2">
         {canResetShowForReplay(show.broadcastState) && hasFinishedCallers && <form action={resetShowForReplayAction.bind(null, show.id)}><button className="button-secondary">Requeue every caller</button></form>}
         {show.status !== "LIVE" && <form action={deleteShowAction.bind(null, show.id)}><button className="button-danger">Delete show</button></form>}
       </div>
     </details>
+
+    <section className="panel panel-pad mt-6">
+      <div><p className="eyebrow">Output layouts</p><h2 className="mt-1 text-lg font-bold text-white">Choose the canvas, then size the browser source</h2><p className="mt-2 text-sm text-slate-400">These are presentation panes, not complete stream scenes. Place them alongside your host camera, chat or other sources in OBS, TikTok Live Studio or your web layout.</p></div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <Link href={broadcastUrl} target="_blank" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 hover:border-cyan-400/50"><Monitor className="h-5 w-5 text-cyan-300" /><p className="mt-3 font-bold text-white">Web · adaptive</p><p className="mt-1 text-xs leading-5 text-slate-400">Automatically switches between narrow and wide composition as its pane changes.</p></Link>
+        <Link href={`/broadcast/${show.id}?token=${show.broadcastToken}&mode=full&layout=tiktok`} target="_blank" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 hover:border-cyan-400/50"><Smartphone className="h-5 w-5 text-cyan-300" /><p className="mt-3 font-bold text-white">TikTok · 9:16</p><p className="mt-1 text-xs leading-5 text-slate-400">Vertical hierarchy with safe, compact caller information for a portrait pane.</p></Link>
+        <Link href={`/broadcast/${show.id}?token=${show.broadcastToken}&mode=full&layout=twitch`} target="_blank" className="rounded-xl border border-slate-700 bg-slate-950/50 p-4 hover:border-cyan-400/50"><Monitor className="h-5 w-5 text-violet-300" /><p className="mt-3 font-bold text-white">Twitch / OBS · 16:9</p><p className="mt-1 text-xs leading-5 text-slate-400">Widescreen caller card that leaves the surrounding stream scene to your broadcast tool.</p></Link>
+      </div>
+    </section>
 
     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
       <section id="running-order" className="panel panel-pad scroll-mt-6">

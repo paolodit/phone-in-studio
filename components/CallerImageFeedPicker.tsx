@@ -36,7 +36,8 @@ export function CallerImageFeedPicker({ callerId, defaultQuery, existingVisualUr
     setAddingUrl(image.imageUrl);
     setMessage("Adding image to this caller’s Visuals tray…");
     try {
-      const response = await fetch(`/api/callers/${callerId}/visuals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: `${image.provider === "pexels" ? "Pexels" : "Pixabay"}: ${image.alt}`, url: image.imageUrl }) });
+      const providerName = image.provider === "pexels" ? "Pexels" : "Pixabay";
+      const response = await fetch(`/api/callers/${callerId}/visuals`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: image.alt, url: image.imageUrl, creditText: `${image.creator} · ${providerName}`, creditUrl: image.sourceUrl }) });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Unable to add the visual.");
       setAddedUrls((current) => new Set([...current, image.imageUrl]));

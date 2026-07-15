@@ -122,6 +122,8 @@ model CallerAsset {
   type             String   @default("SUPPORTING_VISUAL")
   label            String
   url              String
+  creditText       String?
+  creditUrl        String?
   trigger          String?
   manualHotkey     String?
   autoTriggerKeywords String[] @default([])

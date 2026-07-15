@@ -12,4 +12,10 @@ describe("show format configuration", () => {
     const config = buildShowFormatConfig({ title: "Nightline", formatId: "stories", formatGuidance: "Personal stories with a gentle host.", voiceProvider: "elevenlabs" });
     expect(config).toMatchObject({ programmeName: "Nightline", formatId: "stories", voiceProvider: "elevenlabs", formatGuidance: "Personal stories with a gentle host." });
   });
+
+  it("preserves the optional Gemini Live route", () => {
+    const config = buildShowFormatConfig({ title: "Open line", formatId: "discussion", voiceProvider: "gemini" });
+    expect(config.voiceProvider).toBe("gemini");
+    expect(readShowFormatConfig(config, "Fallback").voiceProvider).toBe("gemini");
+  });
 });

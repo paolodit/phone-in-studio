@@ -135,7 +135,7 @@ export const showSetupSchema = z.object({
   title: z.string().trim().min(3).max(120),
   formatId: z.enum(["general", "advice", "discussion", "stories", "sports", "competition", "entertainment"]),
   formatGuidance: z.string().trim().max(1_500).optional().transform((value) => value || undefined),
-  voiceProvider: z.enum(["openai", "elevenlabs"]),
+  voiceProvider: z.enum(["openai", "gemini", "elevenlabs"]),
 });
 
 export const realtimeSessionRequestSchema = z.object({
@@ -160,6 +160,8 @@ export const broadcastVisualSchema = z.object({
 export const callerAssetFormSchema = z.object({
   label: z.string().trim().min(2).max(120),
   url: z.string().url(),
+  creditText: z.string().trim().max(160).optional().transform((value) => value || undefined),
+  creditUrl: z.string().url().optional(),
   trigger: z.string().trim().max(400).optional().transform((value) => value || undefined),
   manualHotkey: z.string().trim().regex(/^[1-9]?$/, "Use a single key from 1 to 9.").optional().transform((value) => value || undefined),
 });
@@ -198,6 +200,8 @@ export const callerSnapshotSchema = z.object({
       type: z.string(),
       label: z.string(),
       url: z.string(),
+      creditText: z.string().nullable().optional(),
+      creditUrl: z.string().nullable().optional(),
       trigger: z.string().nullable().optional(),
       manualHotkey: z.string().nullable().optional(),
       priority: z.number(),

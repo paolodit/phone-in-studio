@@ -12,7 +12,7 @@ export type BroadcastSnapshot = {
     issueHeadline: string;
     openingSummary: string;
     portraitUrl?: string;
-    visual?: { label: string; url: string };
+    visual?: { label: string; url: string; creditText?: string; creditUrl?: string };
   };
 };
 
@@ -29,6 +29,11 @@ export function publicCallerFromSnapshot(rawSnapshot: unknown, activeAssetId?: s
     issueHeadline: snapshot.publicPremise.issueHeadline,
     openingSummary: snapshot.publicPremise.openingSummary,
     ...(portrait ? { portraitUrl: portrait.url } : {}),
-    ...(supportingVisual ? { visual: { label: supportingVisual.label, url: supportingVisual.url } } : {}),
+    ...(supportingVisual ? { visual: {
+      label: supportingVisual.label,
+      url: supportingVisual.url,
+      ...(supportingVisual.creditText ? { creditText: supportingVisual.creditText } : {}),
+      ...(supportingVisual.creditUrl ? { creditUrl: supportingVisual.creditUrl } : {}),
+    } } : {}),
   };
 }
