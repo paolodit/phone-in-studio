@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Image as ImageIcon, Pencil, Save, X } from "lucide-react";
 import { CallerAvatarPicker } from "@/components/CallerAvatarPicker";
 import { CallerImageGenerator } from "@/components/CallerImageGenerator";
+import { normalizeOpenAIVoice, normalizeVoicePresentation, OPENAI_VOICE_OPTIONS } from "@/lib/voices";
 
 type CallerValues = {
   firstName?: string; surnameInitial?: string | null; age?: number | null; location?: string; occupation?: string | null; relationshipStatus?: string | null;
@@ -28,7 +29,8 @@ export function CallerEditor({ action, caller, submitLabel }: {
   const portrait = caller?.assets?.find((asset) => asset.type === "PORTRAIT")?.url ?? "";
   const [portraitUrl, setPortraitUrl] = useState(portrait);
   const [editing, setEditing] = useState(!caller);
-  const selectedVoice = ({ "mock-warm-welsh": "coral", "mock-dry-welsh": "cedar", "mock-confident-welsh": "shimmer", "mock-gravel-welsh": "echo", "mock-keen-welsh": "ash" } as Record<string, string>)[string(performance.voiceId)] ?? string(performance.voiceId, "coral");
+  const selectedVoice = normalizeOpenAIVoice(performance.voiceId ?? "coral");
+  const selectedVoicePresentation = normalizeVoicePresentation(performance.voicePresentation);
   const elevenLabsVoiceId = string(performance.elevenLabsVoiceId);
   const imagePrompt = `${caller?.firstName ?? "A fictional adult caller"}, ${caller?.location ?? "a local radio studio"}. ${caller?.issueHeadline ?? "A strange everyday complaint"}`;
 
@@ -84,7 +86,8 @@ export function CallerEditor({ action, caller, submitLabel }: {
         <label><span className="label">Actual behaviour</span><textarea className="field min-h-20" name="actualBehaviour" defaultValue={string(character.actualBehaviour)} required /></label>
         <label><span className="label">Story tension / pressure point</span><textarea className="field min-h-20" name="comicContradiction" defaultValue={string(character.comicContradiction)} required /></label>
         <label><span className="label">Speech style</span><textarea className="field min-h-20" name="speechStyle" defaultValue={string(character.speechStyle)} required /></label>
-        <label><span className="label">Selected voice</span><select className="field" name="voiceId" defaultValue={selectedVoice} required><option value="alloy">Alloy — neutral</option><option value="ash">Ash — lively</option><option value="ballad">Ballad — rounded</option><option value="coral">Coral — warm</option><option value="cedar">Cedar — dry</option><option value="echo">Echo — low-key</option><option value="marin">Marin — balanced</option><option value="sage">Sage — composed</option><option value="shimmer">Shimmer — bright</option><option value="verse">Verse — expressive</option></select></label>
+        <label><span className="label">Voice presentation</span><select className="field" name="voicePresentation" defaultValue={selectedVoicePresentation}><option value="any">Any / keep selected voice</option><option value="feminine">Feminine</option><option value="masculine">Masculine</option><option value="neutral">Neutral</option></select><span className="mt-1 block text-xs text-slate-500">Matches perceived vocal presentation, not the caller's identity. A specific preference prevents an incompatible voice being used.</span></label>
+        <label><span className="label">Selected voice</span><select className="field" name="voiceId" defaultValue={selectedVoice} required>{OPENAI_VOICE_OPTIONS.map((voice) => <option key={voice.id} value={voice.id}>{voice.label} - {voice.description} / {voice.presentation}</option>)}</select></label>
         <label><span className="label">Delivery pace</span><select className="field" name="pacing" defaultValue={string(performance.pacing, "Conversational")}><option>Measured</option><option>Conversational</option><option>Brisk</option><option>Animated</option></select></label>
         <label><span className="label">ElevenLabs voice ID (optional)</span><input className="field" name="elevenLabsVoiceId" defaultValue={elevenLabsVoiceId} placeholder="Uses the Agent default when blank" /><span className="mt-1 block text-xs text-slate-500">Used only for the ElevenLabs Agent route.</span></label>
         <label className="md:col-span-2"><span className="label">Hidden truth</span><textarea className="field min-h-20" name="hiddenTruth" defaultValue={string(story.hiddenTruth)} required /></label>

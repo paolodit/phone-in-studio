@@ -160,7 +160,7 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
           </>}
         </div>
         {providerId === "openai" && <p className="mt-3 text-xs text-slate-400">Automatic noise-triggered barge-in is off. Use <b>Interrupt caller</b> when you want to cut the response short.</p>}
-        {providerId === "gemini" && <p className="mt-3 text-xs text-slate-400">Gemini uses conservative voice-start detection, short end-of-turn silence and automatic barge-in. Use <b>Interrupt caller</b> for a guaranteed manual cut-in.</p>}
+        {providerId === "gemini" && <p className="mt-3 text-xs text-slate-400">Gemini ignores microphone activity while the caller is speaking, so room noise and brief sounds do not cut an answer short. Use <b>Interrupt caller</b> for a deliberate cut-in. Host speech allows a short natural pause before the turn is sent.</p>}
         <label className="mt-5 block"><span className="label">Caller volume</span><input className="mt-2 w-full accent-cyan-300" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => void changeVolume(Number(event.target.value))} disabled={!session} /></label>
         <div className="mt-5 grid grid-cols-2 gap-4">
           <Meter label="Host microphone" bands={levels.inputBands} tone="cyan" />

@@ -8,6 +8,7 @@ import {
   generatedCallerDraftSchema,
   type GeneratedCallerDraft,
 } from "@/lib/schemas";
+import { resolveOpenAIVoice } from "@/lib/voices";
 
 export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-14.1";
 const DEFAULT_CALLER_GENERATION_MODEL = "gpt-5.4-mini";
@@ -46,13 +47,14 @@ const callerDraftJsonSchema: JsonSchema = {
     escalationBeats: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
     suggestedQuestions: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
     topicTags: { type: "array", minItems: 1, maxItems: 6, items: { type: "string" } },
+    voicePresentation: { type: "string", enum: ["feminine", "masculine", "neutral"] },
     voiceId: { type: "string", enum: ["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"] },
     originalityNotes: { type: "string" }, producerReviewNotes: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
   },
   required: [
     "firstName", "surnameInitial", "age", "location", "occupation", "relationshipStatus", "issueHeadline", "openingSummary",
     "centralWant", "worldview", "actualBehaviour", "comicContradiction", "speechStyle", "hiddenTruth", "escalationBeats", "suggestedQuestions",
-    "topicTags", "voiceId", "originalityNotes", "producerReviewNotes",
+    "topicTags", "voicePresentation", "voiceId", "originalityNotes", "producerReviewNotes",
   ],
   additionalProperties: false,
 };
@@ -153,7 +155,7 @@ export async function developCallerFromPremise(sourceNotes: string, premise: Cal
       "Turn the producer's seed and selected premise into one internally consistent caller card. It is a private production draft, never an approved or live caller.",
       "The caller must be wholly fictional and adult. Do not use real people, brands, existing fictional characters, performer styles, protected characteristics as material, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
       "Keep the scenario safe and reversible. Make the public summary playable, the withheld detail specific, and the host questions fair rather than cruel. The card should work for the format implied by the producer's seed; it is not limited to comedy.",
-      "Choose one suitable voiceId from the allowed options. Add one to six concise topicTags useful for filtering the caller library. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
+      "Choose a perceived voicePresentation and a matching voiceId from the allowed options: feminine uses coral, marin, sage or shimmer; masculine uses ash, ballad, cedar, echo or verse; neutral uses alloy. This is a casting preference for the fictional caller, not material for jokes or stereotyping. Add one to six concise topicTags useful for filtering the caller library. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
     ].join(" "),
     input: `Producer seed notes:\n${input.sourceNotes}\n\nSelected premise:\n${JSON.stringify(selectedPremise)}`,
     validate: (value) => generatedCallerDraftSchema.parse(value),
@@ -179,7 +181,8 @@ export function generatedDraftToCallerForm(draft: GeneratedCallerDraft): CallerF
     escalationBeats: draft.escalationBeats.join("\n"),
     suggestedQuestions: draft.suggestedQuestions.join("\n"),
     topicTags: draft.topicTags.join(", "),
-    voiceId: draft.voiceId,
+    voicePresentation: draft.voicePresentation,
+    voiceId: resolveOpenAIVoice(draft.voiceId, draft.voicePresentation),
     elevenLabsVoiceId: undefined,
     portraitUrl: undefined,
   };

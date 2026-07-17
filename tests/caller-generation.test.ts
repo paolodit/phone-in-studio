@@ -10,7 +10,7 @@ const draft = {
   speechStyle: "Precise, polite and increasingly offended by vague accusations.", hiddenTruth: "The shelf has no ranking system; the neighbours keep putting her old thrillers back on top because they are popular.",
   escalationBeats: ["She produces a colour-coded donation log.", "The host spots her own relocation notes.", "A neighbour's harmless reading preference becomes the decisive clue."],
   suggestedQuestions: ["Who decides where a donated book goes?", "Why does your log include other people's books?", "Could popularity explain the top shelf?"],
-  voiceId: "marin", originalityNotes: "Keep the shelf rules and local details specific rather than resembling an existing sketch.",
+  voicePresentation: "feminine", voiceId: "marin", originalityNotes: "Keep the shelf rules and local details specific rather than resembling an existing sketch.",
   producerReviewNotes: ["Check the local details are fictional.", "Keep the host challenge warm rather than mocking."],
 };
 
@@ -22,7 +22,7 @@ describe("Caller Workshop contracts", () => {
 
   it("turns a generated card into the existing draft form contract", () => {
     const parsed = generatedCallerDraftSchema.parse(draft);
-    expect(generatedDraftToCallerForm(parsed)).toMatchObject({ firstName: "Megan", voiceId: "marin", escalationBeats: expect.stringContaining("colour-coded") });
+    expect(generatedDraftToCallerForm(parsed)).toMatchObject({ firstName: "Megan", voicePresentation: "feminine", voiceId: "marin", escalationBeats: expect.stringContaining("colour-coded") });
   });
 
   it("extracts structured text from the REST Responses shape", () => {

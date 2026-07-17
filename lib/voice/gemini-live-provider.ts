@@ -118,7 +118,18 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
     let nextPlayTime = audioContext.currentTime;
     let inputTranscript = "";
     let outputTranscript = "";
+    let modelSpeaking = false;
+    let pendingDirection: string | null = null;
+    let session: Session;
     const playing = new Set<AudioBufferSourceNode>();
+
+    const applyPendingDirection = () => {
+      if (!pendingDirection) return;
+      const direction = pendingDirection;
+      pendingDirection = null;
+      session.sendClientContent({ turns: `Live producer direction: ${direction}`, turnComplete: false });
+      config.onStatus?.("Caller direction updated");
+    };
 
     const stopPlayback = () => {
       for (const source of playing) {
@@ -138,6 +149,7 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
       playing.add(source);
       source.onended = () => playing.delete(source);
       source.start(start);
+      modelSpeaking = true;
       config.onStatus?.("Caller speaking");
     };
 
@@ -158,19 +170,21 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
       if (content?.inputTranscription?.finished) flushTranscript("HOST");
       if (content?.outputTranscription?.finished) flushTranscript("CALLER");
       if (content?.interrupted) {
+        modelSpeaking = false;
         stopPlayback();
         config.onStatus?.("Caller interrupted");
       }
       if (content?.turnComplete) {
+        modelSpeaking = false;
         flushTranscript("HOST");
         flushTranscript("CALLER");
         config.onStatus?.(content.waitingForInput ? "Waiting for host" : "Listening");
+        applyPendingDirection();
       }
     };
 
     config.onStatus?.("Connecting to Gemini Live…");
     const ai = new GoogleGenAI({ apiKey: payload.token, httpOptions: { apiVersion: "v1alpha" } });
-    let session: Session;
     try {
       session = await ai.live.connect({
         model: payload.model,
@@ -227,7 +241,13 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
     const updateGain = () => { outputGain.gain.value = muted ? 0 : outputVolume; };
     return {
       async updateInstructions(instructions) {
-        session.sendClientContent({ turns: `Producer direction for the caller: ${instructions}`, turnComplete: false });
+        if (modelSpeaking) {
+          pendingDirection = instructions;
+          config.onStatus?.("Caller direction queued for next reply");
+          return;
+        }
+        session.sendClientContent({ turns: `Live producer direction: ${instructions}`, turnComplete: false });
+        config.onStatus?.("Caller direction updated");
       },
       async interrupt() {
         stopPlayback();

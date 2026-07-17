@@ -31,6 +31,7 @@ export function callerStructuredData(input: CallerFormInput) {
     },
     performance: {
       voiceId: input.voiceId,
+      voicePresentation: input.voicePresentation ?? "any",
       elevenLabsVoiceId: input.elevenLabsVoiceId,
       voiceInstructions: input.speechStyle,
       pacing: input.pacing ?? "Conversational",

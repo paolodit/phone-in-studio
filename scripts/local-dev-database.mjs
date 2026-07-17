@@ -37,7 +37,10 @@ if (mode === "init") {
 } else if (mode === "realtime") {
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-realtime-session.ts"]));
 } else {
-  const child = startNode([path.join(root, "node_modules", "next", "dist", "bin", "next"), "dev"]);
+  // Keep every local instance on the same explicit port. Next otherwise moves a
+  // second dev server to 3001/3002 while all instances still write to `.next`,
+  // which can corrupt the shared development bundle.
+  const child = startNode([path.join(root, "node_modules", "next", "dist", "bin", "next"), "dev", "--port", "3000"]);
   const stop = () => child.kill("SIGINT");
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);

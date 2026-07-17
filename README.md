@@ -51,6 +51,8 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - OpenAI Realtime 1.5 browser voice as the default, with host/caller meters and transcripts.
 - Optional Gemini Live routing with server-minted one-use browser credentials, native audio and adjustable VAD.
 - Optional ElevenLabs Conversational AI routing and per-caller voice IDs.
+- Explicit voice-presentation casting for generated and manually edited callers, with compatible OpenAI and Gemini voice selection.
+- Three temporary Host Studio direction controls for caller energy, pace and answer length.
 - Drag-and-drop running orders, caller reactivation and additions during a live show.
 - Automatic incoming, connected and host hang-up tones.
 - Optional cheer, horn, rimshot and custom soundboard cues.
@@ -184,7 +186,11 @@ Both browsers intentionally use the same trusted local admin. Avoid editing the 
 
 The default is `gpt-realtime-1.5`. The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser. Turn-taking uses high-eagerness semantic VAD so the caller responds promptly at a meaningful end-of-turn. Automatic barge-in is disabled to prevent incidental room noise cancelling a caller mid-answer; the host uses **Interrupt** or the **Space** shortcut for a deliberate cut-in.
 
-Each caller can have a supported voice, pace, speech style, response length and interruption behaviour. Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
+Each caller can have a supported voice, perceived voice-presentation preference, pace, speech style, response length and interruption behaviour. Feminine, masculine and neutral preferences are casting metadata rather than a claim about the character's identity. OpenAI and Gemini enforce a compatible voice; **Any** preserves a producer's exact choice. An ElevenLabs caller can use a specific Voice ID, otherwise the configured Agent default remains in control.
+
+While a caller is connected, the Host Studio exposes three centred sliders: **Energy**, **Pace** and **Answer length**. They nudge the next reply relative to the saved caller card and reset for every new caller. They do not permanently edit the character. Gemini queues a change until its current answer finishes so moving a control cannot interrupt the caller.
+
+Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
 
 ### Gemini Live
 
@@ -194,9 +200,9 @@ The permanent key remains server-side. The server creates a one-use, one-minute 
 
 The current comparison settings use:
 
-- low speech-start sensitivity to reject more incidental room noise;
-- high speech-end sensitivity with 360 ms silence for a quicker hand-off;
-- automatic voice barge-in plus the Studio's explicit **Interrupt** control;
+- low speech-start sensitivity with a 400 ms speech commitment window to reject incidental room noise;
+- low speech-end sensitivity with 650 ms silence tolerance so a natural host pause stays within one turn;
+- no automatic microphone barge-in while the caller is answering; use the Studio's **Interrupt** control or **Space** shortcut for a deliberate cut-in;
 - minimal thinking, audio input/output transcripts and a short caller response budget.
 
 This is an optional preview route, not a promise that it will outperform OpenAI in every room. Test with the actual microphone, headphones and ambient noise you intend to use. Gemini Live sessions and preview model availability are provider constraints; see Google's [Live API guide](https://ai.google.dev/gemini-api/docs/live-api) and [ephemeral-token guidance](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).

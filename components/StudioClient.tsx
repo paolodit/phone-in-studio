@@ -11,10 +11,16 @@ import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provi
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
+import { buildLiveDirectionInstructions, neutralLiveDirection, type LiveDirection } from "@/lib/live-direction";
 
 const text = (value: unknown) => typeof value === "string" ? value : "-";
 const textList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const emptyLevels = { input: 0, output: 0, inputBands: Array.from({ length: 12 }, () => 0), outputBands: Array.from({ length: 12 }, () => 0) };
+const directionLabels = {
+  energy: ["Very calm", "Calmer", "Baseline", "Livelier", "Animated"],
+  pace: ["Much slower", "Slower", "Baseline", "Faster", "Much faster"],
+  answerLength: ["Very brief", "Shorter", "Baseline", "Fuller", "Longest"],
+};
 
 function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerHangup" | "cheer" | "horn" | "rimshot") {
   const patterns = {
@@ -71,10 +77,12 @@ export function StudioClient({
   const [muted, setMuted] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
   const [sessionConnected, setSessionConnected] = useState(false);
+  const [liveDirection, setLiveDirection] = useState<LiveDirection>({ ...neutralLiveDirection });
   const [transcript, setTranscript] = useState<{ speaker: "HOST" | "CALLER"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [mediaPane, setMediaPane] = useState<"visuals" | "soundboard">("visuals");
   const sessionRef = useRef<LiveVoiceSession | null>(null);
+  const directionAppliedRef = useRef(false);
   const soundRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const lastAudioLevelSent = useRef(0);
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
@@ -107,6 +115,26 @@ export function StudioClient({
     window.speechSynthesis?.cancel();
     void sessionRef.current?.endSession();
   }, []);
+
+  useEffect(() => {
+    setLiveDirection({ ...neutralLiveDirection });
+    directionAppliedRef.current = false;
+  }, [caller?.id]);
+
+  useEffect(() => {
+    if (!sessionConnected || !sessionRef.current) return;
+    const isNeutral = liveDirection.energy === 0 && liveDirection.pace === 0 && liveDirection.answerLength === 0;
+    if (isNeutral && !directionAppliedRef.current) return;
+    const timer = window.setTimeout(() => {
+      void sessionRef.current?.updateInstructions(buildLiveDirectionInstructions(liveDirection))
+        .then(() => {
+          directionAppliedRef.current = true;
+          setMessage("Live caller direction updated for the next reply.");
+        })
+        .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Unable to update the live caller direction."));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [liveDirection, sessionConnected]);
 
   const persistTranscript = useCallback((entry: { speaker: "HOST" | "CALLER"; text: string }) => {
     setTranscript((entries) => [...entries, entry].slice(-24));
@@ -208,6 +236,7 @@ export function StudioClient({
     await sessionRef.current?.endSession();
     sessionRef.current = null;
     setSessionConnected(false);
+    directionAppliedRef.current = false;
     setVoiceStatus("No browser voice session");
     setLevels(emptyLevels);
     void fetch(`/api/shows/${showId}/audio-levels`, {
@@ -499,6 +528,16 @@ export function StudioClient({
           <button type="button" disabled={busy} onClick={() => void triggerVisual(null)} className="button-secondary">Clear visual</button>
           {showIsLive && <button type="button" disabled={busy} onClick={() => void control("EMERGENCY_STOP")} className="button-danger">Stop all audio (Esc)</button>}
         </div>
+        {caller && sessionConnected && <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="label">Live caller direction</p><p className="mt-1 text-xs text-slate-400">Temporary nudges from the caller's authored baseline. Changes apply to the next reply.</p></div><button type="button" className="text-xs font-bold text-cyan-200 hover:text-white" onClick={() => setLiveDirection({ ...neutralLiveDirection })}>Reset</button></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {([
+              ["energy", "Energy"],
+              ["pace", "Pace"],
+              ["answerLength", "Answer length"],
+            ] as const).map(([key, label]) => <label key={key} className="rounded-lg bg-slate-950/70 p-2"><span className="flex items-center justify-between gap-2 text-xs"><b className="text-slate-200">{label}</b><span className="text-cyan-200">{directionLabels[key][liveDirection[key] + 2]}</span></span><input className="mt-2 w-full accent-cyan-300" type="range" min="-2" max="2" step="1" value={liveDirection[key]} onChange={(event) => setLiveDirection((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}
+          </div>
+        </div>}
         {canConnectAi && <p className="mt-3 text-xs text-slate-400">The main action above creates a fresh, one-use connection for this caller. You never need to manage session credentials.</p>}
         <div className="mt-4 grid gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 md:grid-cols-2">
           <div>
@@ -507,7 +546,7 @@ export function StudioClient({
             <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option></select></label>
             <p className="mt-2 text-xs text-amber-200">Use headphones during live calls to prevent feedback. Live browser audio needs Chrome or Edge at <b>http://localhost:3000</b> or an HTTPS URL; HTTP on a LAN/IP address cannot use the microphone.</p>
             {voiceProvider === "openai" && <p className="mt-2 text-xs text-slate-400">Room noise will not automatically cut off the caller. Press <b>Space</b> or use <b>Interrupt</b> when you want to speak over them.</p>}
-            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini uses conservative speech-start detection to reject more room noise, while retaining natural voice barge-in. The deliberate Interrupt control clears queued caller audio immediately.</p>}
+            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini ignores microphone activity while the caller is speaking, so incidental noise will not cut the answer short. Use Interrupt or Space for a deliberate barge-in. Host speech allows a short natural pause before Gemini replies.</p>}
             {voiceProvider === "elevenlabs" && <p className="mt-2 text-xs text-slate-400">ElevenLabs uses your configured Agent with a short-lived WebRTC token. Set its API key and Agent ID in <code>.env.local</code>; use the caller editor to optionally give an individual caller a voice ID.</p>}
           </div>
           <div className="space-y-2">

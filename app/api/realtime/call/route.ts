@@ -33,9 +33,10 @@ export async function POST(request: Request) {
     format = readShowFormatConfig(show.brandingConfig, show.title);
   }
 
+  const sessionConfig = buildRealtimeSessionConfig(caller, format);
   const body = new FormData();
   body.set("sdp", input.sdp);
-  body.set("session", JSON.stringify({ type: "realtime", ...buildRealtimeSessionConfig(caller, format) }));
+  body.set("session", JSON.stringify({ type: "realtime", ...sessionConfig }));
   const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     headers: {
@@ -54,5 +55,5 @@ export async function POST(request: Request) {
     if (!input.testMode) await prisma.showEvent.create({ data: { showId: input.showId, type: "VOICE_SESSION_ERROR", payload: { source: "webrtc_call", status: response.status } } });
     return NextResponse.json({ error: detail }, { status: 502 });
   }
-  return NextResponse.json({ sdp: answer });
+  return NextResponse.json({ sdp: answer, instructions: sessionConfig.instructions });
 }
