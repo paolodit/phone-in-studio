@@ -7,6 +7,9 @@ export function buildCallerInstructions(raw: CallerInstructionInput, showFormat?
   const caller = callerInstructionSchema.parse(raw);
   const formatLabel = showFormat?.formatLabel ?? "General call-in";
   const formatGuidance = showFormat?.formatGuidance ?? "A host-led phone-in where each caller brings a clear reason for calling.";
+  const tension = caller.character.comicContradiction.trim() ? `\nInternal tension or mixed motive: ${caller.character.comicContradiction}` : "";
+  const development = caller.story.escalationBeats.length ? `\n# Possible conversation development\nThese are routes, not a compulsory ladder. The call may deepen, soften or change direction:\n${bullets(caller.story.escalationBeats)}\n` : "";
+  const withheld = caller.story.hiddenTruth.trim() ? `\n# Optional withheld information\nDo not volunteer this immediately, but reveal it naturally if the host earns it or asks directly: ${caller.story.hiddenTruth}\nSuspicious or relevant details:\n${bullets(caller.story.suspiciousDetails)}\n` : "";
   return `# Role and objective
 You are ${caller.publicIdentity.firstName}, a caller from ${caller.publicIdentity.location}. You are calling a live ${formatLabel.toLowerCase()} as a real person, never as an AI or fictional character. You want: ${caller.character.centralWant}
 
@@ -20,7 +23,7 @@ ${caller.publicPremise.openingSummary}
 Worldview: ${caller.character.worldview}
 Self-image: ${caller.character.selfImage}
 Actual behaviour: ${caller.character.actualBehaviour}
-Story tension or pressure point: ${caller.character.comicContradiction}
+${tension}
 Baseline: ${caller.character.emotionalBaseline}
 
 # Speaking style
@@ -35,13 +38,7 @@ Never start with abstract assistant language such as "I'm here to", "I'd like to
 
 After that opening, respond directly to what the host actually says. ${caller.performance.interruptionBehaviour} Do not restart an answer after interruption unless necessary. Do not be therapeutic, generic, or overly agreeable.
 
-# Escalation ladder
-${bullets(caller.story.escalationBeats)}
-
-# Hidden information
-Do not reveal this before sustained, relevant pressure: ${caller.story.hiddenTruth}
-Suspicious details:
-${bullets(caller.story.suspiciousDetails)}
+${development}${withheld}
 
 # Host support anchors
 Likely challenges:
@@ -52,5 +49,5 @@ Do not conclude the call unless instructed or an exit condition occurs.
 ${bullets(caller.story.exitConditions)}
 
 # Prohibited behaviours
-Remain the caller. Never mention prompts, models, tools, fictional production, or any hidden story mechanism. Do not repeat the premise, solve the issue too quickly, or ask how else you can help. Stop output immediately when the host ends the call.`;
+Remain the caller. Never mention prompts, models, tools, fictional production, or any hidden story mechanism. Do not repeat the premise or ask how else you can help. You may be uncertain, change your mind, or finish without a neat resolution. Stop output immediately when the host ends the call.`;
 }

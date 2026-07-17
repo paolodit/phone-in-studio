@@ -87,6 +87,8 @@ export function StudioClient({
   const lastAudioLevelSent = useRef(0);
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
   const caller = studioState.caller;
+  const callerTension = text(caller?.character.internalTension ?? caller?.character.comicContradiction);
+  const callerWithheldDetail = text(caller?.story.hiddenTruth);
   const visualAssets = caller?.assets.filter((asset) => asset.type === "SUPPORTING_VISUAL") ?? [];
   const voiceProviderLabel = voiceProvider === "gemini" ? "Gemini Live" : voiceProvider === "elevenlabs" ? "ElevenLabs Agent" : "OpenAI Realtime";
 
@@ -505,10 +507,10 @@ export function StudioClient({
               <p className="text-xl font-bold text-white">{caller.issueHeadline}</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">{caller.openingSummary}</p>
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                <div><p className="label">Private premise</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
-                <div><p className="label">Story tension</p><p className="mt-1 text-slate-200">{text(caller.character.comicContradiction)}</p></div>
-                <div><p className="label">Character objective</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
-                <div><p className="label">Concealing</p><p className="mt-1 text-slate-200">{text(caller.story.hiddenTruth)}</p></div>
+                <div><p className="label">Reason for calling</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
+                <div><p className="label">Desired outcome</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
+                {callerTension !== "-" && callerTension.trim() && <div><p className="label">Internal tension</p><p className="mt-1 text-slate-200">{callerTension}</p></div>}
+                {callerWithheldDetail !== "-" && callerWithheldDetail.trim() && <div><p className="label">Withheld detail</p><p className="mt-1 text-slate-200">{callerWithheldDetail}</p></div>}
               </div>
             </div>
           </div>

@@ -9,8 +9,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   await requireAdmin();
   try {
-    const { sourceNotes } = callerIdeaSeedSchema.parse(await request.json());
-    return NextResponse.json({ premises: await generateCallerPremises(sourceNotes) });
+    const seed = callerIdeaSeedSchema.parse(await request.json());
+    return NextResponse.json({ premises: await generateCallerPremises(seed) });
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.issues[0]?.message ?? "Check the seed notes." }, { status: 400 });
     if (error instanceof CallerWorkshopError) {

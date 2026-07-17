@@ -37,15 +37,17 @@ flowchart LR
 
 | Caller Workshop | Show workspace | Host Studio | Broadcast output |
 | --- | --- | --- | --- |
-| Develop or manually create reusable callers, voices, portraits and visuals. | Own the running order, format, voice route, sound cues and output link. | Talk to callers, manage the queue, trigger media and monitor live audio. | Present only the public caller card, selected visual and caller audio EQ. |
+| Start with one sentence, choose from six genuinely different routes, or quick-add a caller manually. Fine-tuning stays optional. | Own the running order, format, voice route, sound cues and output link. | Talk to callers, manage the queue, trigger media and monitor live audio. | Present only the public caller card, selected visual and caller audio EQ. |
 
 The format is intentionally flexible. It can support advice, audience stories, sport, discussion, competitions, specialist topics, entertainment or a format of your own.
 
 ## What works today
 
 - Multiple independent show workspaces.
-- AI-assisted caller development from one seed into six editable directions.
-- Manual caller creation, approval, archive and topic-tag workflows.
+- A deliberately shallow AI caller builder: one seed, optional call-type/tone preferences, six varied directions and one ready-to-use card.
+- Quick manual caller creation with only the on-air essentials required; identity, voice, behavioural notes and graphics are collapsible extras.
+- Searchable caller management with ready/draft/history status, topic filters, portraits and direct private soundchecks.
+- A six-caller demo pack spanning advice, personal stories and eccentric theories: Aisha, Ellie, Owen, Ruth, Baz and Priya.
 - Selectable generated avatars, OpenAI image generation, Pexels and Pixabay visuals.
 - Private caller soundchecks that cannot alter the live queue or programme output.
 - OpenAI Realtime 1.5 browser voice as the default, with host/caller meters and transcripts.
@@ -102,6 +104,12 @@ npm run dev
 ```
 
 This starts the detached local PostgreSQL runtime and Next.js together. Leave `DATABASE_URL` unset in `.env.local` for the local workflow; the development script supplies the connection.
+
+To add or refresh the varied six-caller demo pack without resetting your own shows or callers:
+
+```powershell
+npm run db:demo
+```
 
 ## Configuration
 

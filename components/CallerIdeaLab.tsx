@@ -27,6 +27,8 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 export function CallerIdeaLab() {
   const [sourceNotes, setSourceNotes] = useState("");
+  const [callType, setCallType] = useState("auto");
+  const [tone, setTone] = useState("auto");
   const [premises, setPremises] = useState<CallerPremise[]>([]);
   const [selectedPremise, setSelectedPremise] = useState<CallerPremise | null>(null);
   const [draft, setDraft] = useState<GeneratedCallerDraft | null>(null);
@@ -71,7 +73,7 @@ export function CallerIdeaLab() {
     setSavedDraft(null);
     setNotice(null);
     try {
-      const result = await postJson<{ premises: CallerPremise[] }>("/api/caller-workshop/premises", { sourceNotes });
+      const result = await postJson<{ premises: CallerPremise[] }>("/api/caller-workshop/premises", { sourceNotes, callType, tone });
       setPremises(result.premises);
       setSelectedPremise(result.premises[0] ?? null);
       setShowOptions(true);
@@ -88,7 +90,7 @@ export function CallerIdeaLab() {
     setError(null);
     setSavedDraft(null);
     try {
-      const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, premise: selectedPremise });
+      const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, callType, tone, premise: selectedPremise });
       setDraft(result.draft);
       setShowOptions(false);
       setNotice(`${result.draft.firstName}'s editable caller card is ready.`);
@@ -108,7 +110,7 @@ export function CallerIdeaLab() {
     setBusy("develop");
     setError(null);
     try {
-      const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, premise });
+      const result = await postJson<{ draft: GeneratedCallerDraft }>("/api/caller-workshop/develop", { sourceNotes, callType, tone, premise });
       setDraft(result.draft);
       setShowOptions(false);
       setNotice(`${result.draft.firstName}'s editable caller card is ready.`);
@@ -125,7 +127,7 @@ export function CallerIdeaLab() {
     setBusy("save");
     setError(null);
     try {
-      const result = await postJson<{ callerId: string; editUrl?: string }>("/api/caller-workshop/save", { sourceNotes, premise: selectedPremise, draft });
+      const result = await postJson<{ callerId: string; editUrl?: string }>("/api/caller-workshop/save", { sourceNotes, callType, tone, premise: selectedPremise, draft });
       const saved = { callerId: result.callerId, editUrl: result.editUrl ?? `/callers/${result.callerId}` };
       setSavedDraft(saved);
       window.setTimeout(() => window.location.assign(saved.editUrl), 350);
@@ -138,12 +140,16 @@ export function CallerIdeaLab() {
 
   return <div className="space-y-6">
     <section className="panel panel-pad">
-      <p className="eyebrow">Fast character pack</p>
-      <h2 className="mt-1 text-xl font-bold text-white">Turn one seed into six ready-to-shape callers</h2>
-      <p className="mt-2 max-w-3xl text-sm text-slate-300">Start with any show-worthy situation, view, story, prop, local texture or dilemma. The workshop creates fictional adult callers for any phone-in format; all outputs stay editable and unapproved.</p>
+      <p className="eyebrow">Quick caller builder</p>
+      <h2 className="mt-1 text-xl font-bold text-white">Describe the spark. The workshop does the structuring.</h2>
+      <p className="mt-2 max-w-3xl text-sm text-slate-300">A sentence is enough. Add a preference only when it matters; otherwise the pack deliberately mixes practical, personal, opinion-led and stranger directions.</p>
       <div className="mt-5 flex items-end justify-between gap-3"><span className="label">Seed / source notes</span><button className="button-secondary !min-h-8 !px-3 text-xs" type="button" onClick={toggleDictation}>{dictating ? <><MicOff className="h-3.5 w-3.5" /> Stop dictation</> : <><Mic className="h-3.5 w-3.5" /> Dictate seed</>}</button></div><textarea className="field mt-1 min-h-36" value={sourceNotes} onChange={(event) => { setSourceNotes(event.target.value); setPremises([]); setSelectedPremise(null); setDraft(null); setSavedDraft(null); setNotice(null); setShowOptions(true); }} placeholder="For example: a caller believes a neighbourhood book-swap shelf is enforcing a bizarre hierarchy, but they have been quietly replacing the books they dislike." />
-      <div className="mt-3 flex flex-wrap gap-2 text-xs"><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A caller wants advice after their neighbours have turned the communal garden into a booking system.")}>Advice dilemma</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A supporter insists their local club should retire a number after an unforgettable non-league cup run.")}>Sports opinion</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("A caller tells the host about the small decision that accidentally started a surprisingly intense family tradition.")}>Personal story</button></div>
-      <div className="mt-4 flex flex-wrap items-center gap-3"><button className="button-primary" type="button" onClick={generatePremises} disabled={busy !== null || sourceNotes.trim().length < 12}>{busy === "premises" ? "Finding angles..." : "Generate six options"}</button><span className="text-xs text-slate-500">Nothing is saved until you choose Save draft.</span></div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <label><span className="label">Kind of call <span className="normal-case tracking-normal text-slate-500">(optional)</span></span><select className="field" value={callType} onChange={(event) => setCallType(event.target.value)}><option value="auto">Surprise me with a mix</option><option value="advice">Advice</option><option value="opinion">Opinion or dispute</option><option value="personal">Personal story</option><option value="practical">Practical problem</option><option value="wildcard">Wildcard</option></select></label>
+        <label><span className="label">Tone <span className="normal-case tracking-normal text-slate-500">(optional)</span></span><select className="field" value={tone} onChange={(event) => setTone(event.target.value)}><option value="auto">Let the idea decide</option><option value="grounded">Grounded</option><option value="lively">Lively</option><option value="reflective">Reflective</option><option value="strange">Strange</option></select></label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs"><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("I accepted a promotion over a close friend and now I am not sure whether I am guilty, proud, or both.")}>Work dilemma</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("Were bees just lazy bums before pollination was invented?")}>Strange question</button><button className="rounded-full border border-slate-700 px-3 py-1 text-slate-300 hover:border-cyan-300 hover:text-cyan-100" type="button" onClick={() => setSourceNotes("I keep using my old housemate's Netflix profile because deleting it would mean admitting the friendship is over.")}>Personal story</button></div>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button className="button-primary" type="button" onClick={generatePremises} disabled={busy !== null || sourceNotes.trim().length < 12}>{busy === "premises" ? "Finding distinct callers..." : "Create six caller options"}</button><span className="text-xs text-slate-500">Nothing is saved until you choose a caller.</span></div>
     </section>
 
     {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/40 bg-rose-950/35 px-4 py-3 text-sm text-rose-100"><div><p>{error}</p>{dictationDenied && <p className="mt-1 text-xs text-rose-100/70">If it remains blocked, use the site controls beside the address bar to allow Microphone, then try again.</p>}</div>{dictationDenied && <button className="button-secondary !min-h-8 !px-3 text-xs" type="button" onClick={toggleDictation}><RotateCcw className="h-3.5 w-3.5" /> Try microphone again</button>}</div>}
@@ -158,8 +164,10 @@ export function CallerIdeaLab() {
         return <article key={`${premise.title}-${index}`} className={`panel panel-pad border ${isSelected ? "border-cyan-300" : "border-slate-700/70"}`}>
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-cyan-300">Option {index + 1}</p><h3 className="mt-1 text-lg font-bold text-white">{premise.title}</h3></div><button className={isSelected ? "button-primary" : "button-secondary"} type="button" onClick={() => { setSelectedPremise(premise); setDraft(null); setSavedDraft(null); }}>{isSelected ? "Selected" : "Select"}</button></div>
           <p className="mt-3 text-sm text-slate-200">{premise.setup}</p>
+          <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200">{premise.callMode}</span></div>
           <p className="mt-3 text-sm text-cyan-100"><b>Caller view:</b> {premise.callerPointOfView}</p>
-          <details className="mt-3 rounded-lg bg-slate-950/60 p-3 text-sm"><summary className="cursor-pointer font-bold text-slate-300">Producer detail</summary><dl className="mt-3 grid gap-3"><div><dt className="label">Story tension</dt><dd className="mt-1 text-slate-300">{premise.comicContradiction}</dd></div><div><dt className="label">Host route</dt><dd className="mt-1 text-slate-300">{premise.hostChallenge}</dd></div><div><dt className="label">Escalation</dt><dd className="mt-1 text-slate-300">{premise.escalationPossibility}</dd></div><div><dt className="label">Originality check</dt><dd className="mt-1 text-amber-200">{premise.originalityWarning}</dd></div></dl></details>
+          <p className="mt-2 text-sm text-slate-400"><b className="text-slate-300">Why it matters:</b> {premise.emotionalStake}</p>
+          <details className="mt-3 rounded-lg bg-slate-950/60 p-3 text-sm"><summary className="cursor-pointer font-bold text-slate-300">Optional producer detail</summary><dl className="mt-3 grid gap-3"><div><dt className="label">Internal tension</dt><dd className="mt-1 text-slate-300">{premise.internalTension}</dd></div><div><dt className="label">Host route</dt><dd className="mt-1 text-slate-300">{premise.hostRoute}</dd></div><div><dt className="label">Originality check</dt><dd className="mt-1 text-amber-200">{premise.originalityNote}</dd></div></dl></details>
           <button className="button-primary mt-4 w-full" type="button" onClick={() => void developPremise(premise)} disabled={busy !== null}>{busy === "develop" && isSelected ? "Building caller…" : draft && isSelected ? "Rebuild this caller" : "Build this caller"}</button>
         </article>;
       })}</div>
@@ -167,11 +175,10 @@ export function CallerIdeaLab() {
     </section>}
 
     {draft && <section id="caller-draft" className="space-y-4">
-      <div><p className="eyebrow">Ready-to-edit caller</p><h2 className="mt-1 text-xl font-bold text-white">{draft.firstName} {draft.surnameInitial} - {draft.issueHeadline}</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">This is a private, unapproved production draft. Save it now for an immediately usable caller card; deeper producer controls stay available in the editor when needed.</p></div>
+      <div><p className="eyebrow">Ready-to-use caller</p><h2 className="mt-1 text-xl font-bold text-white">{draft.firstName} {draft.surnameInitial} - {draft.issueHeadline}</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">The workshop has filled in the production detail. Save it as-is, or fine-tune the optional notes later.</p></div>
       {savedDraft ? <div className="rounded-2xl border border-emerald-300/50 bg-emerald-400/10 p-4 text-sm text-emerald-50"><p className="font-bold">Draft saved.</p><p className="mt-1">Opening the normal caller editor now. If it does not open, <a className="font-bold underline" href={savedDraft.editUrl}>open the editable draft</a>.</p></div> : <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-300/40 bg-cyan-400/10 p-4"><p className="text-sm text-cyan-50"><b>Next:</b> save this candidate to create its editable caller draft. Nothing is approved or queued by this step.</p><button className="button-primary" type="button" onClick={saveDraft} disabled={busy !== null}>{busy === "save" ? "Saving editable draft..." : "Save and open editor"}</button></div>}
-      <div className="grid gap-4 lg:grid-cols-2"><article className="panel panel-pad"><h3 className="font-bold text-white">Public caller frame</h3><dl className="mt-4 grid gap-3 text-sm"><div><dt className="label">Identity</dt><dd className="mt-1 text-slate-200">{draft.age}, {draft.location} - {draft.occupation}</dd></div><div><dt className="label">Relationship status</dt><dd className="mt-1 text-slate-200">{draft.relationshipStatus}</dd></div><div><dt className="label">Opening summary</dt><dd className="mt-1 text-slate-200">{draft.openingSummary}</dd></div><div><dt className="label">Speech style</dt><dd className="mt-1 text-slate-200">{draft.speechStyle}</dd></div></dl></article>
-        <article className="panel panel-pad"><h3 className="font-bold text-white">Private caller card</h3><dl className="mt-4 grid gap-3 text-sm"><div><dt className="label">Central want</dt><dd className="mt-1 text-slate-200">{draft.centralWant}</dd></div><div><dt className="label">Actual behaviour</dt><dd className="mt-1 text-slate-200">{draft.actualBehaviour}</dd></div><div><dt className="label">Story tension</dt><dd className="mt-1 text-slate-200">{draft.comicContradiction}</dd></div><div><dt className="label">Withheld detail</dt><dd className="mt-1 text-slate-200">{draft.hiddenTruth}</dd></div></dl></article></div>
-      <div className="grid gap-4 lg:grid-cols-2"><article className="panel panel-pad"><h3 className="font-bold text-white">Escalation beats</h3><ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-300">{draft.escalationBeats.map((beat) => <li key={beat}>{beat}</li>)}</ol></article><article className="panel panel-pad"><h3 className="font-bold text-white">Suggested host questions</h3><ul className="mt-3 space-y-2 text-sm text-slate-300">{draft.suggestedQuestions.map((question) => <li key={question}>- {question}</li>)}</ul></article></div>
+      <article className="panel panel-pad"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="eyebrow">Caller card</p><p className="mt-1 text-lg font-bold text-white">{draft.firstName} {draft.surnameInitial}</p><p className="mt-1 text-sm text-slate-400">{draft.age} · {draft.location} · {draft.occupation}</p></div><div className="flex flex-wrap gap-2"><span className="status bg-cyan-400/10 text-cyan-200">{draft.callMode}</span><span className="status bg-slate-800 text-slate-300">{draft.emotionalTemperature} energy</span></div></div><p className="mt-5 text-base font-bold text-white">{draft.issueHeadline}</p><p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">{draft.openingSummary}</p><div className="mt-5 grid gap-4 border-t border-slate-700/70 pt-4 md:grid-cols-3"><div><p className="label">What they want</p><p className="mt-1 text-sm text-slate-200">{draft.desiredOutcome}</p></div><div><p className="label">Why it matters</p><p className="mt-1 text-sm text-slate-200">{draft.emotionalStake}</p></div><div><p className="label">How they sound</p><p className="mt-1 text-sm text-slate-200">{draft.speechStyle}</p></div></div></article>
+      <details className="panel panel-pad"><summary className="cursor-pointer font-bold text-slate-200">Fine-tune the generated notes <span className="ml-2 text-sm font-normal text-slate-500">optional</span></summary><div className="mt-4 grid gap-4 text-sm md:grid-cols-2"><div><p className="label">Self-story</p><p className="mt-1 text-slate-300">{draft.selfStory}</p></div><div><p className="label">Behaviour</p><p className="mt-1 text-slate-300">{draft.behaviour}</p></div><div><p className="label">Internal tension</p><p className="mt-1 text-slate-300">{draft.internalTension}</p></div>{draft.withheldDetail && <div><p className="label">Optional withheld detail</p><p className="mt-1 text-slate-300">{draft.withheldDetail}</p></div>}<div><p className="label">Conversation routes</p>{draft.developmentBeats.length ? <ul className="mt-2 space-y-1 text-slate-300">{draft.developmentBeats.map((beat) => <li key={beat}>- {beat}</li>)}</ul> : <p className="mt-1 text-slate-500">No fixed beats; let the call develop naturally.</p>}</div><div><p className="label">Host questions</p><ul className="mt-2 space-y-1 text-slate-300">{draft.suggestedQuestions.map((question) => <li key={question}>- {question}</li>)}</ul></div></div></details>
       <details className="rounded-2xl border border-amber-400/40 bg-amber-950/30 p-4"><summary className="cursor-pointer font-bold text-amber-100">Optional producer review notes</summary><p className="mt-3 text-sm text-amber-50/90">{draft.originalityNotes}</p><ul className="mt-3 space-y-1 text-sm text-amber-50/90">{draft.producerReviewNotes.map((note) => <li key={note}>- {note}</li>)}</ul></details>
       {!savedDraft && <button className="button-primary" type="button" onClick={saveDraft} disabled={busy !== null}>{busy === "save" ? "Saving editable draft..." : "Save and open editor"}</button>}
     </section>}

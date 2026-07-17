@@ -14,6 +14,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:demo": "node scripts/local-dev-database.mjs demo",
     "db:local:init": "node scripts/local-dev-database.mjs init",
     "db:local:stop": "node scripts/prisma-dev.mjs stop ai-phone-in",
     "verify:local": "node scripts/local-dev-database.mjs verify",

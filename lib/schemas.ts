@@ -11,17 +11,17 @@ export const callerFormSchema = z.object({
   relationshipStatus: optionalText,
   issueHeadline: z.string().trim().min(5).max(180),
   openingSummary: z.string().trim().min(10).max(1_000),
-  centralWant: z.string().trim().min(3).max(500),
-  worldview: z.string().trim().min(3).max(500),
-  actualBehaviour: z.string().trim().min(3).max(500),
-  comicContradiction: z.string().trim().min(3).max(500),
-  speechStyle: z.string().trim().min(3).max(500),
-  hiddenTruth: z.string().trim().min(3).max(1_000),
-  escalationBeats: z.string().trim().min(3).max(2_000),
-  suggestedQuestions: z.string().trim().min(3).max(2_000),
+  centralWant: z.string().trim().max(500).optional().default(""),
+  worldview: z.string().trim().max(500).optional().default(""),
+  actualBehaviour: z.string().trim().max(500).optional().default(""),
+  comicContradiction: z.string().trim().max(500).optional().default(""),
+  speechStyle: z.string().trim().max(500).optional().default(""),
+  hiddenTruth: z.string().trim().max(1_000).optional().default(""),
+  escalationBeats: z.string().trim().max(2_000).optional().default(""),
+  suggestedQuestions: z.string().trim().max(2_000).optional().default(""),
   topicTags: z.string().trim().max(320).optional().default(""),
   voicePresentation: z.enum(["any", "feminine", "masculine", "neutral"]).optional(),
-  voiceId: z.string().trim().min(1).max(120),
+  voiceId: z.string().trim().min(1).max(120).optional().default("marin"),
   elevenLabsVoiceId: optionalText,
   pacing: z.enum(["Measured", "Conversational", "Brisk", "Animated"]).optional(),
   portraitUrl: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
@@ -31,16 +31,21 @@ export type CallerFormInput = z.infer<typeof callerFormSchema>;
 
 export const callerIdeaSeedSchema = z.object({
   sourceNotes: z.string().trim().min(12, "Add a little more detail so the workshop has something to develop.").max(4_000),
+  callType: z.enum(["auto", "advice", "opinion", "personal", "practical", "wildcard"]).optional().default("auto"),
+  tone: z.enum(["auto", "grounded", "lively", "reflective", "strange"]).optional().default("auto"),
 });
+
+export type CallerIdeaSeed = z.infer<typeof callerIdeaSeedSchema>;
 
 export const callerPremiseSchema = z.object({
   title: z.string().trim().min(3).max(100),
   setup: z.string().trim().min(12).max(600),
   callerPointOfView: z.string().trim().min(8).max(400),
-  comicContradiction: z.string().trim().min(8).max(400),
-  escalationPossibility: z.string().trim().min(8).max(400),
-  hostChallenge: z.string().trim().min(8).max(400),
-  originalityWarning: z.string().trim().min(8).max(400),
+  callMode: z.enum(["advice", "opinion", "personal story", "practical problem", "light/strange", "wildcard"]),
+  emotionalStake: z.string().trim().min(8).max(400),
+  internalTension: z.string().trim().min(3).max(400),
+  hostRoute: z.string().trim().min(8).max(400),
+  originalityNote: z.string().trim().min(8).max(400),
 });
 
 export type CallerPremise = z.infer<typeof callerPremiseSchema>;
@@ -58,14 +63,17 @@ export const generatedCallerDraftSchema = z.object({
   relationshipStatus: z.string().trim().min(2).max(120),
   issueHeadline: z.string().trim().min(5).max(180),
   openingSummary: z.string().trim().min(10).max(1_000),
-  centralWant: z.string().trim().min(3).max(500),
-  worldview: z.string().trim().min(3).max(500),
-  actualBehaviour: z.string().trim().min(3).max(500),
-  comicContradiction: z.string().trim().min(3).max(500),
+  desiredOutcome: z.string().trim().min(3).max(500),
+  selfStory: z.string().trim().min(3).max(500),
+  emotionalStake: z.string().trim().min(3).max(500),
+  behaviour: z.string().trim().min(3).max(500),
+  internalTension: z.string().trim().min(3).max(500),
   speechStyle: z.string().trim().min(3).max(500),
-  hiddenTruth: z.string().trim().min(3).max(1_000),
-  escalationBeats: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
+  withheldDetail: z.string().trim().max(1_000),
+  developmentBeats: z.array(z.string().trim().min(3).max(500)).max(4),
   suggestedQuestions: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
+  callMode: z.enum(["advice", "opinion", "personal story", "practical problem", "light/strange", "wildcard"]),
+  emotionalTemperature: z.enum(["low", "medium", "high"]),
   topicTags: z.array(z.string().trim().min(2).max(40)).max(6).optional().default([]),
   voicePresentation: z.enum(["feminine", "masculine", "neutral"]),
   voiceId: z.enum(["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"]),
@@ -77,6 +85,8 @@ export type GeneratedCallerDraft = z.infer<typeof generatedCallerDraftSchema>;
 
 export const generatedCallerSaveSchema = z.object({
   sourceNotes: callerIdeaSeedSchema.shape.sourceNotes,
+  callType: callerIdeaSeedSchema.shape.callType,
+  tone: callerIdeaSeedSchema.shape.tone,
   premise: callerPremiseSchema,
   draft: generatedCallerDraftSchema,
 });

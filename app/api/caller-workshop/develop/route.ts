@@ -10,9 +10,9 @@ export async function POST(request: Request) {
   await requireAdmin();
   try {
     const body = await request.json();
-    const { sourceNotes } = callerIdeaSeedSchema.parse(body);
+    const seed = callerIdeaSeedSchema.parse(body);
     const premise = callerPremiseSchema.parse(body.premise);
-    return NextResponse.json({ draft: await developCallerFromPremise(sourceNotes, premise) });
+    return NextResponse.json({ draft: await developCallerFromPremise(seed, premise) });
   } catch (error) {
     if (error instanceof ZodError) return NextResponse.json({ error: error.issues[0]?.message ?? "Check the selected premise." }, { status: 400 });
     if (error instanceof CallerWorkshopError) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   callerIdeaSeedSchema,
+  type CallerIdeaSeed,
   callerPremiseSchema,
   callerPremisesSchema,
   type CallerFormInput,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/schemas";
 import { resolveOpenAIVoice } from "@/lib/voices";
 
-export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-14.1";
+export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-17.1";
 const DEFAULT_CALLER_GENERATION_MODEL = "gpt-5.4-mini";
 
 type JsonSchema = Record<string, unknown>;
@@ -21,12 +22,13 @@ const premiseItemJsonSchema: JsonSchema = {
     title: { type: "string" },
     setup: { type: "string" },
     callerPointOfView: { type: "string" },
-    comicContradiction: { type: "string" },
-    escalationPossibility: { type: "string" },
-    hostChallenge: { type: "string" },
-    originalityWarning: { type: "string" },
+    callMode: { type: "string", enum: ["advice", "opinion", "personal story", "practical problem", "light/strange", "wildcard"] },
+    emotionalStake: { type: "string" },
+    internalTension: { type: "string" },
+    hostRoute: { type: "string" },
+    originalityNote: { type: "string" },
   },
-  required: ["title", "setup", "callerPointOfView", "comicContradiction", "escalationPossibility", "hostChallenge", "originalityWarning"],
+  required: ["title", "setup", "callerPointOfView", "callMode", "emotionalStake", "internalTension", "hostRoute", "originalityNote"],
   additionalProperties: false,
 };
 
@@ -42,10 +44,12 @@ const callerDraftJsonSchema: JsonSchema = {
   properties: {
     firstName: { type: "string" }, surnameInitial: { type: "string" }, age: { type: "integer" }, location: { type: "string" },
     occupation: { type: "string" }, relationshipStatus: { type: "string" }, issueHeadline: { type: "string" }, openingSummary: { type: "string" },
-    centralWant: { type: "string" }, worldview: { type: "string" }, actualBehaviour: { type: "string" }, comicContradiction: { type: "string" },
-    speechStyle: { type: "string" }, hiddenTruth: { type: "string" },
-    escalationBeats: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
+    desiredOutcome: { type: "string" }, selfStory: { type: "string" }, emotionalStake: { type: "string" }, behaviour: { type: "string" }, internalTension: { type: "string" },
+    speechStyle: { type: "string" }, withheldDetail: { type: "string" },
+    developmentBeats: { type: "array", minItems: 0, maxItems: 4, items: { type: "string" } },
     suggestedQuestions: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
+    callMode: { type: "string", enum: ["advice", "opinion", "personal story", "practical problem", "light/strange", "wildcard"] },
+    emotionalTemperature: { type: "string", enum: ["low", "medium", "high"] },
     topicTags: { type: "array", minItems: 1, maxItems: 6, items: { type: "string" } },
     voicePresentation: { type: "string", enum: ["feminine", "masculine", "neutral"] },
     voiceId: { type: "string", enum: ["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"] },
@@ -53,7 +57,8 @@ const callerDraftJsonSchema: JsonSchema = {
   },
   required: [
     "firstName", "surnameInitial", "age", "location", "occupation", "relationshipStatus", "issueHeadline", "openingSummary",
-    "centralWant", "worldview", "actualBehaviour", "comicContradiction", "speechStyle", "hiddenTruth", "escalationBeats", "suggestedQuestions",
+    "desiredOutcome", "selfStory", "emotionalStake", "behaviour", "internalTension", "speechStyle", "withheldDetail", "developmentBeats", "suggestedQuestions",
+    "callMode", "emotionalTemperature",
     "topicTags", "voicePresentation", "voiceId", "originalityNotes", "producerReviewNotes",
   ],
   additionalProperties: false,
@@ -125,26 +130,33 @@ async function requestStructuredOutput<T>(options: {
   }
 }
 
-export async function generateCallerPremises(sourceNotes: string) {
-  const input = callerIdeaSeedSchema.parse({ sourceNotes });
+function seedBrief(input: CallerIdeaSeed) {
+  const type = input.callType === "auto" ? "Choose the most promising mix of call types." : `Bias the pack toward ${input.callType} calls.`;
+  const tone = input.tone === "auto" ? "Vary the emotional tone." : `Keep the overall tone ${input.tone}.`;
+  return `Producer seed notes:\n${input.sourceNotes}\n\nCreative preference: ${type} ${tone}`;
+}
+
+export async function generateCallerPremises(seed: string | CallerIdeaSeed) {
+  const input = callerIdeaSeedSchema.parse(typeof seed === "string" ? { sourceNotes: seed } : seed);
   return requestStructuredOutput({
     name: "caller_premises",
     schema: premisesJsonSchema,
     maxOutputTokens: 2_000,
     instructions: [
       "You are a development editor for a fictional, adult UK phone-in and livestream production toolkit.",
-      "Generate exactly six clearly different caller or guest premise options from the producer's seed. Every caller must be wholly fictional and an adult.",
+      "Generate exactly six clearly different caller premise options from the producer's seed. Every caller must be wholly fictional and an adult.",
       "Do not use real people, real private individuals, brands, existing fictional characters, performers' styles, protected characteristics as material, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
-      "Give each option a playable point of view, a specific pressure point or tension, and a host who can courteously explore it. Humour is optional: the seed may suit advice, discussion, story, sport, competition, or entertainment formats.",
-      "The originality warning should tell the producer what to vary or check before using the idea. Keep all fields concise and production-useful.",
+      "Across an automatic pack, deliberately vary the modes: practical, reflective, opinion or dispute, personal story, light or strange, and wildcard. Do not force every idea into a joke or a twist.",
+      "Give each option a clear reason to call, an emotional stake, a point of view, and an internal tension the host can explore without humiliating the caller. The tension may be uncertainty, mixed motives, social pressure, or a contradiction; it does not need to be a secret.",
+      "The originality note should tell the producer what to vary or check before using the idea. Keep all fields concise and production-useful.",
     ].join(" "),
-    input: `Producer seed notes:\n${input.sourceNotes}`,
+    input: seedBrief(input),
     validate: (value) => callerPremisesSchema.parse(value).premises,
   });
 }
 
-export async function developCallerFromPremise(sourceNotes: string, premise: CallerPremise) {
-  const input = callerIdeaSeedSchema.parse({ sourceNotes });
+export async function developCallerFromPremise(seed: string | CallerIdeaSeed, premise: CallerPremise) {
+  const input = callerIdeaSeedSchema.parse(typeof seed === "string" ? { sourceNotes: seed } : seed);
   const selectedPremise = callerPremiseSchema.parse(premise);
   return requestStructuredOutput({
     name: "caller_draft",
@@ -154,10 +166,11 @@ export async function developCallerFromPremise(sourceNotes: string, premise: Cal
       "You are a development editor for a fictional, adult UK phone-in and livestream production toolkit.",
       "Turn the producer's seed and selected premise into one internally consistent caller card. It is a private production draft, never an approved or live caller.",
       "The caller must be wholly fictional and adult. Do not use real people, brands, existing fictional characters, performer styles, protected characteristics as material, slurs, cruelty, medical or legal allegations, criminal accusations, or traumatic subjects.",
-      "Keep the scenario safe and reversible. Make the public summary playable, the withheld detail specific, and the host questions fair rather than cruel. The card should work for the format implied by the producer's seed; it is not limited to comedy.",
+      "Keep the scenario safe and reversible. Make the public summary playable and the host questions fair rather than cruel. The card should work for the format implied by the producer's seed; it is not limited to comedy.",
+      "A withheld detail is optional. Use an empty string when the call is stronger without one. Development beats are also optional and may deepen, soften or redirect the conversation rather than escalating it. The caller may remain uncertain, reconsider, or leave without a neat resolution.",
       "Choose a perceived voicePresentation and a matching voiceId from the allowed options: feminine uses coral, marin, sage or shimmer; masculine uses ash, ballad, cedar, echo or verse; neutral uses alloy. This is a casting preference for the fictional caller, not material for jokes or stereotyping. Add one to six concise topicTags useful for filtering the caller library. Spread voices across callers over time rather than always choosing the same one. The producer review notes must identify checks a human should make before approval, including originality and tone.",
     ].join(" "),
-    input: `Producer seed notes:\n${input.sourceNotes}\n\nSelected premise:\n${JSON.stringify(selectedPremise)}`,
+    input: `${seedBrief(input)}\n\nSelected premise:\n${JSON.stringify(selectedPremise)}`,
     validate: (value) => generatedCallerDraftSchema.parse(value),
   });
 }
@@ -172,13 +185,13 @@ export function generatedDraftToCallerForm(draft: GeneratedCallerDraft): CallerF
     relationshipStatus: draft.relationshipStatus,
     issueHeadline: draft.issueHeadline,
     openingSummary: draft.openingSummary,
-    centralWant: draft.centralWant,
-    worldview: draft.worldview,
-    actualBehaviour: draft.actualBehaviour,
-    comicContradiction: draft.comicContradiction,
+    centralWant: draft.desiredOutcome,
+    worldview: draft.selfStory,
+    actualBehaviour: draft.behaviour,
+    comicContradiction: draft.internalTension,
     speechStyle: draft.speechStyle,
-    hiddenTruth: draft.hiddenTruth,
-    escalationBeats: draft.escalationBeats.join("\n"),
+    hiddenTruth: draft.withheldDetail,
+    escalationBeats: draft.developmentBeats.join("\n"),
     suggestedQuestions: draft.suggestedQuestions.join("\n"),
     topicTags: draft.topicTags.join(", "),
     voicePresentation: draft.voicePresentation,
