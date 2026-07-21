@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Headphones, Search, Sparkles, UserPlus } from "lucide-react";
+import { Factory, Headphones, Search, Sparkles, UserPlus } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { callerTags, jsonRecord } from "@/lib/caller-tags";
 import { StudioNav } from "@/components/StudioNav";
+import { moduleEnabled } from "@/lib/modules";
 
 type SearchParams = { q?: string; sort?: string; status?: string; appeared?: string; tag?: string };
 const archivedStatuses = new Set(["COMPLETED", "SKIPPED", "FAILED"]);
@@ -11,12 +12,12 @@ const archivedStatuses = new Set(["COMPLETED", "SKIPPED", "FAILED"]);
 export default async function CallersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireAdmin();
   const filters = await searchParams;
-  const callers = await prisma.caller.findMany({
+  const [callers, factoryEnabled] = await Promise.all([prisma.caller.findMany({
     include: {
       assets: { where: { type: "PORTRAIT" }, orderBy: { createdAt: "asc" }, take: 1 },
       queueItems: { select: { status: true, startedAt: true } },
     },
-  });
+  }), moduleEnabled("CALLER_FACTORY")]);
   const tagOptions = [...new Set(callers.flatMap((caller) => callerTags(jsonRecord(caller.generation).topicTags)))].sort((a, b) => a.localeCompare(b));
   const query = filters.q?.trim().toLowerCase() ?? "";
   const visible = callers.filter((caller) => {
@@ -34,7 +35,7 @@ export default async function CallersPage({ searchParams }: { searchParams: Prom
   const draftCount = callers.filter((caller) => caller.status === "DRAFT" || caller.status === "DEVELOPING").length;
 
   return <main className="shell"><StudioNav />
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">Caller library</p><h1 className="title">Your callers</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">Find someone ready to use, test their voice, or create the next caller without filling out a character dossier.</p></div><div className="flex flex-wrap gap-2"><Link className="button-secondary" href="/callers/new"><UserPlus className="h-4 w-4" /> Quick add</Link><Link className="button-primary" href="/callers/develop"><Sparkles className="h-4 w-4" /> Build with AI</Link></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">Caller library</p><h1 className="title">Your callers</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">Find someone ready to use, test their voice, or create the next caller without filling out a character dossier.</p></div><div className="flex flex-wrap gap-2">{factoryEnabled && <Link className="button-secondary" href="/callers/factory"><Factory className="h-4 w-4" /> Candidate batches</Link>}<Link className="button-secondary" href="/callers/new"><UserPlus className="h-4 w-4" /> Quick add</Link><Link className="button-primary" href="/callers/develop"><Sparkles className="h-4 w-4" /> Build with AI</Link></div></div>
 
     <div className="mt-6 grid grid-cols-3 gap-2 md:max-w-xl"><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-white">{callers.length}</p><p className="mt-1 text-xs text-slate-500">total</p></div><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-emerald-200">{approvedCount}</p><p className="mt-1 text-xs text-slate-500">ready</p></div><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-cyan-200">{appearedCount}</p><p className="mt-1 text-xs text-slate-500">appeared</p></div></div>
 

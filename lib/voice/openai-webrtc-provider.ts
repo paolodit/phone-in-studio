@@ -193,10 +193,15 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
         const baseInstructions = answerPayload.instructions || config.instructions;
         send({ type: "session.update", session: { instructions: `${baseInstructions}\n\n# Live producer direction\n${instructions}` } });
       },
+      async sendHostText(text) {
+        send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } });
+        send({ type: "response.create" });
+      },
       async interrupt() {
         send({ type: "response.cancel" });
         send({ type: "output_audio_buffer.clear" });
       },
+      async muteInput(muted) { microphone.getAudioTracks().forEach((track) => { track.enabled = !muted; }); },
       async muteOutput(muted) {
         outputMuted = muted;
         output.muted = outputMuted;

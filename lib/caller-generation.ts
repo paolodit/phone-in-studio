@@ -39,7 +39,7 @@ const premisesJsonSchema: JsonSchema = {
   additionalProperties: false,
 };
 
-const callerDraftJsonSchema: JsonSchema = {
+export const callerDraftJsonSchema: JsonSchema = {
   type: "object",
   properties: {
     firstName: { type: "string" }, surnameInitial: { type: "string" }, age: { type: "integer" }, location: { type: "string" },
@@ -87,7 +87,7 @@ export function extractResponseText(payload: OpenAiResponsePayload) {
   throw new CallerWorkshopError("The model returned no usable workshop draft. Please try again.", "invalid_output");
 }
 
-async function requestStructuredOutput<T>(options: {
+export async function requestStructuredOutput<T>(options: {
   name: string;
   schema: JsonSchema;
   instructions: string;
@@ -128,6 +128,45 @@ async function requestStructuredOutput<T>(options: {
     }
     throw error;
   }
+}
+
+export async function generateCallerPackChunk(input: {
+  seed: string;
+  tone: string;
+  mix: string;
+  intensity: string;
+  exclusions?: string;
+  count: number;
+  existing: { name: string; headline: string }[];
+}) {
+  const count = Math.max(1, Math.min(2, input.count));
+  const schema: JsonSchema = {
+    type: "object",
+    properties: { callers: { type: "array", minItems: count, maxItems: count, items: callerDraftJsonSchema } },
+    required: ["callers"],
+    additionalProperties: false,
+  };
+  const resultSchema = z.object({ callers: z.array(generatedCallerDraftSchema).length(count) });
+  return requestStructuredOutput({
+    name: "caller_factory_chunk",
+    schema,
+    maxOutputTokens: 6_000,
+    instructions: [
+      "You are assembling a varied pack of fictional adult callers for a UK phone-in and livestream production toolkit.",
+      `Create exactly ${count} complete caller cards that fit the same editorial brief but are clearly different people, situations, voices and conversational energies.`,
+      "Treat the brief as a distribution, not a template. Avoid repeated names, locations, occupations, headlines, emotional problems or identical hidden twists.",
+      "The callers may be advice-seeking, opinionated, personally vulnerable, practical, playful or strange. Do not force comedy or a secret into every caller.",
+      "All people are fictional adults. Do not imitate or identify real private people, use protected traits as material, diagnose conditions, make criminal allegations, or give medical or legal advice.",
+      "Choose voicePresentation and a compatible varied OpenAI voice. Keep openings specific and speakable. Producer review notes should be brief and genuinely useful.",
+    ].join(" "),
+    input: [
+      `Editorial seed:\n${input.seed}`,
+      `Pack settings: tone ${input.tone}; emphasis ${input.mix}; emotional intensity ${input.intensity}.`,
+      input.exclusions ? `Additional exclusions: ${input.exclusions}` : "",
+      input.existing.length ? `Do not duplicate these existing candidates:\n${input.existing.map((item) => `- ${item.name}: ${item.headline}`).join("\n")}` : "This is the first chunk in the batch.",
+    ].filter(Boolean).join("\n\n"),
+    validate: (value) => resultSchema.parse(value).callers,
+  });
 }
 
 function seedBrief(input: CallerIdeaSeed) {

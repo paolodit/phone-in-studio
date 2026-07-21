@@ -54,6 +54,21 @@ export const callerPremisesSchema = z.object({
   premises: z.array(callerPremiseSchema).length(6),
 });
 
+export const automatedVisualPackSchema = z.object({
+  status: z.enum(["READY", "SKIPPED", "FAILED"]),
+  query: z.string().trim().max(160),
+  items: z.array(z.object({
+    id: z.string().min(1),
+    provider: z.enum(["pexels", "pixabay"]),
+    imageUrl: z.string().url(),
+    previewUrl: z.string().url(),
+    alt: z.string().trim().min(1).max(500),
+    creator: z.string().trim().min(1).max(160),
+    sourceUrl: z.string().url(),
+  })).max(3),
+  error: z.string().trim().max(500).optional(),
+});
+
 export const generatedCallerDraftSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
   surnameInitial: z.string().trim().max(1),
@@ -79,6 +94,7 @@ export const generatedCallerDraftSchema = z.object({
   voiceId: z.enum(["alloy", "ash", "ballad", "coral", "cedar", "echo", "marin", "sage", "shimmer", "verse"]),
   originalityNotes: z.string().trim().min(8).max(500),
   producerReviewNotes: z.array(z.string().trim().min(3).max(500)).min(1).max(5),
+  autoVisuals: automatedVisualPackSchema.optional(),
 });
 
 export type GeneratedCallerDraft = z.infer<typeof generatedCallerDraftSchema>;
@@ -148,6 +164,58 @@ export const showSetupSchema = z.object({
   formatId: z.enum(["general", "advice", "discussion", "stories", "sports", "competition", "entertainment"]),
   formatGuidance: z.string().trim().max(1_500).optional().transform((value) => value || undefined),
   voiceProvider: z.enum(["openai", "gemini", "elevenlabs"]),
+});
+
+export const optionalModuleKeySchema = z.enum(["AI_HOST", "CALLER_FACTORY"]);
+
+export const hostProfileSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  publicIdentity: z.string().trim().max(240).optional().transform((value) => value || undefined),
+  voiceProvider: z.literal("openai").default("openai"),
+  voiceId: z.enum(["alloy", "echo", "fable", "nova", "onyx", "shimmer"]),
+  stylePreset: z.enum(["gentle", "practical", "debate", "lively", "custom"]),
+  warmth: z.coerce.number().int().min(-2).max(2),
+  energy: z.coerce.number().int().min(-2).max(2),
+  patience: z.coerce.number().int().min(-2).max(2),
+  playfulness: z.coerce.number().int().min(-2).max(2),
+  guidance: z.string().trim().max(2_000).optional().transform((value) => value || undefined),
+  boundaries: z.string().trim().max(2_000).optional().transform((value) => value || undefined),
+});
+
+export const showModuleSetupSchema = z.object({
+  aiHostEnabled: z.preprocess((value) => value === "on", z.boolean()),
+  callerFactoryEnabled: z.preprocess((value) => value === "on", z.boolean()),
+  hostMode: z.enum(["HUMAN", "AI_SUPERVISED", "AI_AUTONOMOUS"]),
+  hostProfileId: z.string().trim().optional().transform((value) => value || undefined),
+  autoMaxTurns: z.coerce.number().int().min(1).max(8).default(4),
+  autoBetweenCallsSeconds: z.coerce.number().int().min(1).max(15).default(3),
+  autoVisualPolicy: z.enum(["OFF", "PREPARE", "AUTO_SHOW"]).default("AUTO_SHOW"),
+  autoVisualAvoidPeople: z.preprocess((value) => value === undefined ? true : value === "on", z.boolean()),
+});
+
+export const callerFactoryBatchSchema = z.object({
+  title: z.string().trim().min(3).max(100),
+  seed: z.string().trim().min(24).max(4_000),
+  targetCount: z.coerce.number().int().min(10).max(20),
+  tone: z.enum(["varied", "grounded", "reflective", "lively", "edgy", "strange"]),
+  mix: z.enum(["balanced", "personal", "advice", "opinion", "practical", "unusual"]),
+  intensity: z.enum(["low", "medium", "high"]),
+  exclusions: z.string().trim().max(1_000).optional().transform((value) => value || undefined),
+  showId: z.string().trim().optional().transform((value) => value || undefined),
+});
+
+export const aiHostTurnSchema = z.object({
+  showId: z.string().min(1).optional(),
+  callerId: z.string().min(1).optional(),
+  profileId: z.string().min(1).optional(),
+  testMode: z.boolean().optional().default(false),
+  intent: z.enum(["respond", "close"]).optional().default("respond"),
+  transcript: z.array(z.object({ speaker: z.enum(["HOST", "CALLER"]), text: z.string().trim().min(1).max(4_000) })).max(30),
+}).refine((value) => value.testMode ? Boolean(value.profileId) : Boolean(value.showId && value.callerId), "Choose a host profile or active show caller.");
+
+export const aiHostSpeechSchema = z.object({
+  profileId: z.string().min(1),
+  text: z.string().trim().min(1).max(2_000),
 });
 
 export const realtimeSessionRequestSchema = z.object({

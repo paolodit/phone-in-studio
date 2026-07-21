@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, ListOrdered, Mic2, Monitor, Settings2, Smartphone } from "lucide-react";
+import { Bot, ExternalLink, Factory, ListOrdered, Mic2, Monitor, Settings2, Smartphone } from "lucide-react";
 import { LiveQueueAdder } from "@/components/LiveQueueAdder";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 import { ShowPreflight } from "@/components/ShowPreflight";
@@ -11,16 +11,21 @@ import {
   resetShowForReplayAction,
   updateShowAction,
 } from "@/lib/actions/show-actions";
+import { updateShowModulesAction } from "@/lib/actions/module-actions";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canResetShowForReplay } from "@/lib/show-service";
 import { readShowFormatConfig, SHOW_FORMATS } from "@/lib/show-format";
+import { globalModuleState } from "@/lib/modules";
+
+const object = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 export default async function ShowDetailPage({ params, searchParams }: { params: Promise<{ showId: string }>; searchParams: Promise<{ section?: string }> }) {
   await requireAdmin();
   const { showId } = await params;
   const { section } = await searchParams;
-  const [show, approvedCallers] = await Promise.all([
+  const moduleState = await globalModuleState();
+  const [show, approvedCallers, hostProfiles] = await Promise.all([
     prisma.show.findUniqueOrThrow({
       where: { id: showId },
       include: {
@@ -29,6 +34,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
           orderBy: { position: "asc" },
         },
         soundEffects: { orderBy: { createdAt: "asc" } },
+        moduleSettings: true,
       },
     }),
     prisma.caller.findMany({
@@ -36,10 +42,13 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       orderBy: { firstName: "asc" },
       select: { id: true, firstName: true, surnameInitial: true, issueHeadline: true },
     }),
+    moduleState.AI_HOST ? prisma.hostProfile.findMany({ where: { active: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
   ]);
   const broadcastUrl = `/broadcast/${show.id}?token=${show.broadcastToken}&mode=full&layout=web`;
   const hasFinishedCallers = show.queueItems.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status));
   const formatConfig = readShowFormatConfig(show.brandingConfig, show.title);
+  const aiHostSetting = show.moduleSettings.find((item) => item.key === "AI_HOST");
+  const aiHostConfig = object(aiHostSetting?.config);
 
   return <main className="shell">
     <StudioNav />
@@ -67,6 +76,27 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
         <label className="lg:col-span-3"><span className="label">Format guidance for AI callers</span><textarea className="field min-h-20" name="formatGuidance" defaultValue={formatConfig.formatGuidance} placeholder="Give callers the tone, host relationship and purpose of this format." /></label>
         <p className="text-xs leading-5 text-slate-400">Gemini Live needs <code>GEMINI_API_KEY</code>. ElevenLabs needs <code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code>. Permanent keys stay server-side; each browser connection uses a short-lived credential.</p>
       </form>
+      {(moduleState.AI_HOST || moduleState.CALLER_FACTORY) && <section className="mt-5 border-t border-slate-700/70 pt-5">
+        <div><p className="eyebrow">Optional modules</p><p className="mt-1 text-sm text-slate-400">Global switches only make modules available. This show still opts in separately.</p></div>
+        <form action={updateShowModulesAction.bind(null, show.id)} className="mt-4 grid gap-4 lg:grid-cols-2">
+          {moduleState.AI_HOST && <div className="rounded-xl border border-violet-300/20 bg-violet-300/5 p-4">
+            <div className="flex items-start gap-3"><Bot className="mt-0.5 h-5 w-5 text-violet-200" /><div><p className="font-bold text-white">AI Host</p><p className="mt-1 text-xs leading-5 text-slate-400">Choose one-turn supervision or a deliberately armed automatic running mode. Human takeover remains immediate.</p></div></div>
+            <label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-200"><input type="checkbox" name="aiHostEnabled" defaultChecked={Boolean(aiHostSetting?.enabled)} /> Enable for this show</label>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label><span className="label">Presenter</span><select className="field" name="hostProfileId" defaultValue={show.hostProfileId ?? ""}><option value="">Choose a profile</option>{hostProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+              <label><span className="label">Host mode</span><select className="field" name="hostMode" defaultValue={show.hostMode}><option value="HUMAN">Human host</option><option value="AI_SUPERVISED">AI host · supervised</option><option value="AI_AUTONOMOUS">AI host · auto-run</option></select></label>
+              <label><span className="label">Conversation turns</span><input className="field" type="number" name="autoMaxTurns" min="1" max="8" defaultValue={Number(aiHostConfig.maxTurnsPerCaller ?? 4)} /></label>
+              <label><span className="label">Seconds between calls</span><input className="field" type="number" name="autoBetweenCallsSeconds" min="1" max="15" defaultValue={Number(aiHostConfig.betweenCallsSeconds ?? 3)} /></label>
+              <label><span className="label">Automated topic visuals</span><select className="field" name="autoVisualPolicy" defaultValue={String(aiHostConfig.visualPolicy ?? (show.hostMode === "AI_AUTONOMOUS" ? "AUTO_SHOW" : "OFF"))}><option value="OFF">Off · portraits only</option><option value="PREPARE">Prepare · host triggers</option><option value="AUTO_SHOW">Full auto · prepare and show</option></select></label>
+              <label className="flex items-center gap-2 self-end rounded-xl border border-slate-700 bg-slate-950/50 p-3 text-sm font-bold text-slate-200"><input type="checkbox" name="autoVisualAvoidPeople" defaultChecked={aiHostConfig.visualAvoidPeople !== false} /> Prefer objects and places, not people</label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs"><Link className="font-bold text-violet-200 hover:text-white" href="/settings/modules/ai-host">Manage profiles</Link><span className="text-slate-500">Full auto prepares credited stock images before broadcast, shows one after the caller opens and falls back to the portrait if none is available.</span></div>
+          </div>}
+          {moduleState.CALLER_FACTORY && <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4"><div className="flex items-start gap-3"><Factory className="mt-0.5 h-5 w-5 text-cyan-200" /><div><p className="font-bold text-white">Caller Factory</p><p className="mt-1 text-xs leading-5 text-slate-400">Allows a candidate batch to be developed with this show as its editorial home.</p></div></div><label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-200"><input type="checkbox" name="callerFactoryEnabled" defaultChecked={Boolean(show.moduleSettings.find((item) => item.key === "CALLER_FACTORY")?.enabled)} /> Enable for this show</label><Link className="button-secondary mt-3" href="/callers/factory"><Factory className="h-4 w-4" /> Open Caller Factory</Link></div>}
+          {!moduleState.AI_HOST && <input type="hidden" name="hostMode" value="HUMAN" />}
+          <div className="lg:col-span-2"><button className="button-primary">Save module setup</button></div>
+        </form>
+      </section>}
       <div className="mt-3 flex flex-wrap gap-2">
         {canResetShowForReplay(show.broadcastState) && hasFinishedCallers && <form action={resetShowForReplayAction.bind(null, show.id)}><button className="button-secondary">Requeue every caller</button></form>}
         {show.status !== "LIVE" && <form action={deleteShowAction.bind(null, show.id)}><button className="button-danger">Delete show</button></form>}

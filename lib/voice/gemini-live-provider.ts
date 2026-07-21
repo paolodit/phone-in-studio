@@ -113,6 +113,7 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
 
     let ended = false;
     let muted = false;
+    let inputMuted = false;
     let outputVolume = 1;
     let frame = 0;
     let nextPlayTime = audioContext.currentTime;
@@ -206,7 +207,7 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
     }
 
     processor.onaudioprocess = (event) => {
-      if (ended) return;
+      if (ended || inputMuted) return;
       session.sendRealtimeInput({
         audio: { data: pcmBase64(event.inputBuffer.getChannelData(0)), mimeType: `audio/pcm;rate=${audioContext.sampleRate}` },
       });
@@ -249,11 +250,13 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
         session.sendClientContent({ turns: `Live producer direction: ${instructions}`, turnComplete: false });
         config.onStatus?.("Caller direction updated");
       },
+      async sendHostText(text) { session.sendClientContent({ turns: text, turnComplete: true }); },
       async interrupt() {
         stopPlayback();
         // Ordered client content always interrupts an in-flight model turn.
         session.sendClientContent({ turns: "[The host interrupts. Stop your current answer immediately and listen for the next question.]", turnComplete: false });
       },
+      async muteInput(nextMuted) { inputMuted = nextMuted; },
       async muteOutput(nextMuted) { muted = nextMuted; updateGain(); },
       async setOutputVolume(volume) { outputVolume = clamp(volume); updateGain(); },
       async switchInputDevice(deviceId) { await replaceInput(deviceId); },

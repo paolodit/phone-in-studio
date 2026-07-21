@@ -62,6 +62,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - A caller-output EQ shared with the broadcast display.
 - Photographer/contributor attribution retained from stock search to the live output.
 - Privacy-filtered broadcast data that excludes private caller mechanics and API keys.
+- Two deliberately hidden automation modules: an AI Host with supervised and guarded auto-run modes, plus a staged 10–20-caller Factory. Both are off in a fresh installation and require a separate opt-in for each show.
 
 ## Quick start
 
@@ -122,6 +123,8 @@ All provider credentials remain server-side. Never commit `.env.local`.
 | `OPENAI_API_KEY` | Recommended | Caller Workshop, OpenAI Realtime and AI image generation. |
 | `OPENAI_REALTIME_MODEL` | No | Overrides the default `gpt-realtime-1.5` voice model. |
 | `OPENAI_CALLER_GENERATION_MODEL` | No | Overrides the Caller Workshop model. |
+| `OPENAI_HOST_MODEL` | No | Overrides the model used to write AI Host turns. |
+| `OPENAI_HOST_TTS_MODEL` | No | Overrides the speech model used for the AI Host; defaults to `tts-1`. |
 | `OPENAI_IMAGE_MODEL` | No | Overrides the image-generation model. |
 | `GEMINI_API_KEY` | No | Enables the Gemini Live comparison route. |
 | `GEMINI_LIVE_MODEL` | No | Overrides `gemini-3.1-flash-live-preview`. |
@@ -187,6 +190,29 @@ Keep the **Host Studio** open for the presenter and the relevant **show workspac
 The producer can create and approve new callers and add them to the running order while the host continues the current call. The Studio refreshes its queue without interrupting live caller audio.
 
 Both browsers intentionally use the same trusted local admin. Avoid editing the same caller or running order at exactly the same moment; proper organisation accounts, invitations, presence and role management are outside this hobbyist-first scope.
+
+## Optional automation modules
+
+The normal first-run experience remains a human host building or choosing callers manually. Open **Settings → Optional modules** only when you want automation. A global switch makes a module available; each show then opts into it separately under **Show options**. Disabling a global switch removes the module from normal navigation without deleting its profiles, batches or callers.
+
+### AI Host
+
+1. Enable **AI Host** under Optional modules.
+2. Create a presenter profile with a public identity, voice, style and a few behavioural sliders.
+3. Use the private soundcheck to hear one response without touching a live show.
+4. Assign the profile to a show and choose **AI host · supervised** or **AI host · auto-run**.
+5. In supervised mode, press **AI host: one turn** when the presenter should speak.
+6. In auto-run mode, choose a per-caller presenter-turn limit, delay between calls and visual policy, then deliberately press **Start auto-run** in Studio.
+
+Auto-run starts and answers queued callers, responds after completed caller turns, closes at the configured turn limit, and advances the running order. It never arms on page load. **Take over**, **Pause auto-run** and **Emergency Stop** remain authoritative, and a generation, speech or transition error pauses automation for the human host.
+
+Automated topic visuals have three policies: **Off** keeps the portrait on screen; **Prepare** gives the host three credited stock images to trigger manually; **Full auto** prepares those images and shows the primary one after the caller's opening contribution. Images are fetched while developing or accepting the candidate rather than during the live call. A missing provider key, empty search or display error falls back to the portrait and never stops the audio conversation.
+
+### Caller Factory
+
+The Factory develops **10–20 candidates per batch** from a broad editorial brief. It works in small resumable chunks, checks new headlines against the batch and existing caller library, and stores results in a separate candidate inbox. When its show enables prepared or automatic visuals, each new candidate also receives up to three topic images with creator and provider attribution. You can pause or cancel a batch, edit a candidate, reject it, restore it, or accept one or all candidates.
+
+Acceptance is the boundary: only an accepted candidate becomes a normal editable caller draft. Nothing is automatically approved, queued or sent to a broadcast. An optional show assignment gives the batch editorial context but still does not alter that show's running order.
 
 ## Voice routes
 
@@ -332,6 +358,8 @@ public/               Bundled caller and interface assets
 ## Sensible next steps
 
 - Real-room comparison and tuning across OpenAI 1.5, Gemini Live and ElevenLabs.
+- Real-show testing and recovery tuning for guarded AI Host auto-run.
+- Scheduling, cost caps and semantic duplicate detection for recurring Caller Factory batches.
 - A 1:1 output preset plus user-adjustable safe areas and theme controls.
 - Managed deployment, secrets, PostgreSQL backups and operational monitoring.
 - More robust audio reconnection, device switching and provider failover.
