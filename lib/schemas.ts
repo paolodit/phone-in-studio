@@ -23,6 +23,7 @@ export const callerFormSchema = z.object({
   voicePresentation: z.enum(["any", "feminine", "masculine", "neutral"]).optional(),
   voiceId: z.string().trim().min(1).max(120).optional().default("marin"),
   elevenLabsVoiceId: optionalText,
+  fishAudioVoiceId: optionalText,
   pacing: z.enum(["Measured", "Conversational", "Brisk", "Animated"]).optional(),
   portraitUrl: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
 });
@@ -163,7 +164,7 @@ export const showSetupSchema = z.object({
   title: z.string().trim().min(3).max(120),
   formatId: z.enum(["general", "advice", "discussion", "stories", "sports", "competition", "entertainment"]),
   formatGuidance: z.string().trim().max(1_500).optional().transform((value) => value || undefined),
-  voiceProvider: z.enum(["openai", "gemini", "elevenlabs"]),
+  voiceProvider: z.enum(["openai", "gemini", "elevenlabs", "fish"]),
 });
 
 export const optionalModuleKeySchema = z.enum(["AI_HOST", "CALLER_FACTORY"]);
@@ -222,6 +223,19 @@ export const realtimeSessionRequestSchema = z.object({
   showId: z.string().min(1),
   callerId: z.string().min(1),
   testMode: z.boolean().optional().default(false),
+});
+
+export const fishCallerTurnSchema = realtimeSessionRequestSchema.extend({
+  opening: z.boolean().optional().default(false),
+  producerDirection: z.string().trim().max(2_000).optional(),
+  transcript: z.array(z.object({
+    speaker: z.enum(["HOST", "CALLER"]),
+    text: z.string().trim().min(1).max(4_000),
+  })).max(30),
+});
+
+export const fishSpeechSchema = realtimeSessionRequestSchema.extend({
+  text: z.string().trim().min(1).max(2_000),
 });
 
 export const realtimeCallRequestSchema = realtimeSessionRequestSchema.extend({

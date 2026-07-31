@@ -18,4 +18,10 @@ describe("show format configuration", () => {
     expect(config.voiceProvider).toBe("gemini");
     expect(readShowFormatConfig(config, "Fallback").voiceProvider).toBe("gemini");
   });
+
+  it("preserves the optional Fish Audio route", () => {
+    const config = buildShowFormatConfig({ title: "Voice lab", formatId: "general", voiceProvider: "fish" });
+    expect(config.voiceProvider).toBe("fish");
+    expect(readShowFormatConfig(config, "Fallback").voiceProvider).toBe("fish");
+  });
 });

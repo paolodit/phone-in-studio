@@ -17,4 +17,15 @@ describe("simplified caller form", () => {
     expect(structured.story.escalationBeats).toEqual([]);
     expect(structured.performance.voiceId).toBe("marin");
   });
+
+  it("keeps a caller-specific Fish voice model ID optional", () => {
+    const form = callerFormSchema.parse({
+      firstName: "Owen",
+      location: "Bristol",
+      issueHeadline: "I made a spreadsheet to become more spontaneous.",
+      openingSummary: "Owen bought a pottery wheel to loosen up, then built an elaborate planning system around it.",
+      fishAudioVoiceId: "802e3bc2b27e49c2995d23ef70e6ac89",
+    });
+    expect(callerStructuredData(form).performance.fishAudioVoiceId).toBe("802e3bc2b27e49c2995d23ef70e6ac89");
+  });
 });

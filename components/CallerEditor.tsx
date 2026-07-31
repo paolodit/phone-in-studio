@@ -32,6 +32,7 @@ export function CallerEditor({ action, caller, submitLabel }: {
   const selectedVoice = normalizeOpenAIVoice(performance.voiceId ?? "marin");
   const selectedVoicePresentation = normalizeVoicePresentation(performance.voicePresentation);
   const elevenLabsVoiceId = string(performance.elevenLabsVoiceId);
+  const fishAudioVoiceId = string(performance.fishAudioVoiceId);
   const imagePrompt = `${caller?.firstName ?? "A fictional adult caller"}, ${caller?.location ?? "a local radio studio"}. ${caller?.issueHeadline ?? "A distinctive everyday phone-in topic"}`;
   const tags = Array.isArray(generation.topicTags) ? generation.topicTags.filter((tag): tag is string => typeof tag === "string") : [];
 
@@ -77,6 +78,7 @@ export function CallerEditor({ action, caller, submitLabel }: {
         <label><span className="label">Selected voice</span><select className="field" name="voiceId" defaultValue={selectedVoice}>{OPENAI_VOICE_OPTIONS.map((voice) => <option key={voice.id} value={voice.id}>{voice.label} — {voice.description}</option>)}</select></label>
         <label><span className="label">Delivery pace</span><select className="field" name="pacing" defaultValue={string(performance.pacing, "Conversational")}><option>Measured</option><option>Conversational</option><option>Brisk</option><option>Animated</option></select></label>
         <label><span className="label">ElevenLabs voice ID</span><input className="field" name="elevenLabsVoiceId" defaultValue={elevenLabsVoiceId} placeholder="Optional; otherwise uses the Agent default" /></label>
+        <label className="md:col-span-2"><span className="label">Fish Audio voice model ID</span><input className="field" name="fishAudioVoiceId" defaultValue={fishAudioVoiceId} placeholder="Optional; otherwise uses FISH_AUDIO_VOICE_ID or Fish's default voice" /><span className="mt-1 block text-xs text-slate-500">Copy the model ID from a Fish Audio voice page. This only affects the optional Fish route.</span></label>
       </div>
     </details>
 

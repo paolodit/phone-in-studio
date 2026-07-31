@@ -45,6 +45,7 @@ export function callerStructuredData(input: CallerFormInput) {
       voiceId: input.voiceId,
       voicePresentation: input.voicePresentation ?? "any",
       elevenLabsVoiceId: input.elevenLabsVoiceId,
+      fishAudioVoiceId: input.fishAudioVoiceId,
       voiceInstructions: speakingStyle,
       pacing: input.pacing ?? "Conversational",
       averageResponseLength: "One to three sentences",
