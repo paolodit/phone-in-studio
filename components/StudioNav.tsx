@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Radio } from "lucide-react";
+import { Plus, Radio, Settings } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth-actions";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +17,7 @@ export async function StudioNav() {
           <Link className="rounded px-2 py-1 hover:bg-slate-800" href="/studio">Studio</Link>
           <Link className="rounded px-2 py-1 hover:bg-slate-800" href="/callers">Callers</Link>
           <Link className="rounded px-2 py-1 hover:bg-slate-800" href="/shows">Shows</Link>
+          <Link className="rounded px-2 py-1 hover:bg-slate-800" href="/settings/modules" title="Settings"><Settings className="h-4 w-4" /><span className="sr-only">Settings</span></Link>
           <form action={logoutAction}><button className="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-white">Sign out</button></form>
         </div>
       </nav>

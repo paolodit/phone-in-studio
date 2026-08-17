@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioLines, ExternalLink, Headphones, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provider";
+import { FishAudioVoiceProvider } from "@/lib/voice/fish-audio-provider";
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import type { LiveVoiceSession } from "@/lib/voice/types";
@@ -86,7 +87,13 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
     setTranscript([]);
     try {
       if (sessionRef.current) await end();
-      const provider = providerId === "gemini" ? new GeminiLiveVoiceProvider() : providerId === "elevenlabs" ? new ElevenLabsAgentVoiceProvider() : new OpenAIWebRtcVoiceProvider();
+      const provider = providerId === "gemini"
+        ? new GeminiLiveVoiceProvider()
+        : providerId === "elevenlabs"
+          ? new ElevenLabsAgentVoiceProvider()
+          : providerId === "fish"
+            ? new FishAudioVoiceProvider()
+            : new OpenAIWebRtcVoiceProvider();
       const nextSession = await provider.createSession({
         callerId: caller.id,
         showId: `private-test-${caller.id}`,
@@ -149,7 +156,7 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
       <div className="panel panel-pad">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">Voice connection</p><h2 className="mt-1 text-lg font-bold text-white">{status}</h2></div><span className={`status ${session ? "bg-emerald-400 text-emerald-950" : "bg-slate-800 text-slate-300"}`}>{session ? "Test connected" : "Off air"}</span></div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session)}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option></select></label>
+          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session)}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
           <label><span className="label">Host microphone</span><select className="field" value={inputDeviceId} onChange={(event) => void changeInput(event.target.value)} disabled={!session}><option value="">Default microphone</option>{inputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
@@ -160,7 +167,8 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
           </>}
         </div>
         {providerId === "openai" && <p className="mt-3 text-xs text-slate-400">Automatic noise-triggered barge-in is off. Use <b>Interrupt caller</b> when you want to cut the response short.</p>}
-        {providerId === "gemini" && <p className="mt-3 text-xs text-slate-400">Gemini uses conservative voice-start detection, short end-of-turn silence and automatic barge-in. Use <b>Interrupt caller</b> for a guaranteed manual cut-in.</p>}
+        {providerId === "gemini" && <p className="mt-3 text-xs text-slate-400">Gemini closes the microphone stream while caller audio is playing, including a short acoustic tail, so room noise and brief sounds do not cut an answer short. Use <b>Interrupt caller</b> for a deliberate cut-in. Host speech allows a natural pause before the turn is sent.</p>}
+        {providerId === "fish" && <p className="mt-3 text-xs text-slate-400">Fish Audio is tested as a turn-based voice pipeline. Finish a complete sentence and pause; conservative speech detection sends that host turn to Fish transcription, then renders the caller reply with Fish S2.1. It cannot provide true duplex barge-in.</p>}
         <label className="mt-5 block"><span className="label">Caller volume</span><input className="mt-2 w-full accent-cyan-300" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => void changeVolume(Number(event.target.value))} disabled={!session} /></label>
         <div className="mt-5 grid grid-cols-2 gap-4">
           <Meter label="Host microphone" bands={levels.inputBands} tone="cyan" />

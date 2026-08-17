@@ -113,19 +113,63 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
 
     let ended = false;
     let muted = false;
+    let inputMuted = false;
     let outputVolume = 1;
     let frame = 0;
     let nextPlayTime = audioContext.currentTime;
     let inputTranscript = "";
     let outputTranscript = "";
+    let modelSpeaking = false;
+    let serverTurnComplete = false;
+    let microphoneStreamOpen = true;
+    let microphoneResumeAt = 0;
+    let playbackReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingDirection: string | null = null;
+    let session: Session;
     const playing = new Set<AudioBufferSourceNode>();
 
+    const clearPlaybackReleaseTimer = () => {
+      if (playbackReleaseTimer === null) return;
+      clearTimeout(playbackReleaseTimer);
+      playbackReleaseTimer = null;
+    };
+
+    const closeMicrophoneStream = () => {
+      if (!microphoneStreamOpen) return;
+      session.sendRealtimeInput({ audioStreamEnd: true });
+      microphoneStreamOpen = false;
+    };
+
+    const applyPendingDirection = () => {
+      if (!pendingDirection) return;
+      const direction = pendingDirection;
+      pendingDirection = null;
+      session.sendClientContent({ turns: `Live producer direction: ${direction}`, turnComplete: false });
+      config.onStatus?.("Caller direction updated");
+    };
+
     const stopPlayback = () => {
+      clearPlaybackReleaseTimer();
       for (const source of playing) {
         try { source.stop(); } catch { /* Already stopped. */ }
       }
       playing.clear();
       nextPlayTime = audioContext.currentTime;
+    };
+
+    const releaseMicrophoneAfterPlayback = () => {
+      if (!serverTurnComplete || playing.size > 0 || playbackReleaseTimer !== null) return;
+      // Keep the input closed briefly after the final scheduled sample. This
+      // prevents speaker/room echo and short handling noises being mistaken
+      // for a new host turn.
+      playbackReleaseTimer = setTimeout(() => {
+        playbackReleaseTimer = null;
+        modelSpeaking = false;
+        serverTurnComplete = false;
+        microphoneResumeAt = audioContext.currentTime + 0.12;
+        config.onStatus?.("Listening for host");
+        applyPendingDirection();
+      }, 350);
     };
 
     const playChunk = (encoded: string) => {
@@ -136,8 +180,14 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
       const start = Math.max(audioContext.currentTime + 0.015, nextPlayTime);
       nextPlayTime = start + source.buffer.duration;
       playing.add(source);
-      source.onended = () => playing.delete(source);
+      source.onended = () => {
+        playing.delete(source);
+        releaseMicrophoneAfterPlayback();
+      };
+      clearPlaybackReleaseTimer();
+      closeMicrophoneStream();
       source.start(start);
+      modelSpeaking = true;
       config.onStatus?.("Caller speaking");
     };
 
@@ -159,18 +209,27 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
       if (content?.outputTranscription?.finished) flushTranscript("CALLER");
       if (content?.interrupted) {
         stopPlayback();
+        modelSpeaking = false;
+        serverTurnComplete = false;
+        microphoneResumeAt = audioContext.currentTime + 0.12;
         config.onStatus?.("Caller interrupted");
       }
       if (content?.turnComplete) {
+        serverTurnComplete = true;
         flushTranscript("HOST");
         flushTranscript("CALLER");
-        config.onStatus?.(content.waitingForInput ? "Waiting for host" : "Listening");
+        if (!modelSpeaking && playing.size === 0) {
+          serverTurnComplete = false;
+          config.onStatus?.(content.waitingForInput ? "Waiting for host" : "Listening");
+          applyPendingDirection();
+        } else {
+          releaseMicrophoneAfterPlayback();
+        }
       }
     };
 
     config.onStatus?.("Connecting to Gemini Live…");
     const ai = new GoogleGenAI({ apiKey: payload.token, httpOptions: { apiVersion: "v1alpha" } });
-    let session: Session;
     try {
       session = await ai.live.connect({
         model: payload.model,
@@ -192,7 +251,8 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
     }
 
     processor.onaudioprocess = (event) => {
-      if (ended) return;
+      if (ended || inputMuted || modelSpeaking || playing.size > 0 || audioContext.currentTime < microphoneResumeAt) return;
+      microphoneStreamOpen = true;
       session.sendRealtimeInput({
         audio: { data: pcmBase64(event.inputBuffer.getChannelData(0)), mimeType: `audio/pcm;rate=${audioContext.sampleRate}` },
       });
@@ -227,12 +287,26 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
     const updateGain = () => { outputGain.gain.value = muted ? 0 : outputVolume; };
     return {
       async updateInstructions(instructions) {
-        session.sendClientContent({ turns: `Producer direction for the caller: ${instructions}`, turnComplete: false });
+        if (modelSpeaking) {
+          pendingDirection = instructions;
+          config.onStatus?.("Caller direction queued for next reply");
+          return;
+        }
+        session.sendClientContent({ turns: `Live producer direction: ${instructions}`, turnComplete: false });
+        config.onStatus?.("Caller direction updated");
       },
+      async sendHostText(text) { session.sendClientContent({ turns: text, turnComplete: true }); },
       async interrupt() {
         stopPlayback();
+        modelSpeaking = false;
+        serverTurnComplete = false;
+        microphoneResumeAt = audioContext.currentTime + 0.12;
         // Ordered client content always interrupts an in-flight model turn.
         session.sendClientContent({ turns: "[The host interrupts. Stop your current answer immediately and listen for the next question.]", turnComplete: false });
+      },
+      async muteInput(nextMuted) {
+        inputMuted = nextMuted;
+        if (nextMuted) closeMicrophoneStream();
       },
       async muteOutput(nextMuted) { muted = nextMuted; updateGain(); },
       async setOutputVolume(volume) { outputVolume = clamp(volume); updateGain(); },
@@ -241,8 +315,9 @@ export class GeminiLiveVoiceProvider implements LiveVoiceProvider {
         if (ended) return;
         ended = true;
         cancelAnimationFrame(frame);
+        clearPlaybackReleaseTimer();
         processor.onaudioprocess = null;
-        session.sendRealtimeInput({ audioStreamEnd: true });
+        if (microphoneStreamOpen) session.sendRealtimeInput({ audioStreamEnd: true });
         session.close();
         stopPlayback();
         microphone.getTracks().forEach((track) => track.stop());

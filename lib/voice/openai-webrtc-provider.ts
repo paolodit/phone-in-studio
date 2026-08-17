@@ -151,7 +151,7 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ showId: config.showId, callerId: config.callerId, testMode: config.testMode ?? false, sdp: offer.sdp ?? "" }),
     });
-    const answerPayload = await answer.json().catch(() => null) as { sdp?: string; error?: string } | null;
+    const answerPayload = await answer.json().catch(() => null) as { sdp?: string; instructions?: string; error?: string } | null;
     const closeFailedAttempt = async () => {
       ended = true;
       cancelAnimationFrame(frame);
@@ -189,11 +189,19 @@ export class OpenAIWebRtcVoiceProvider implements LiveVoiceProvider {
     };
 
     return {
-      async updateInstructions(instructions) { send({ type: "session.update", session: { instructions } }); },
+      async updateInstructions(instructions) {
+        const baseInstructions = answerPayload.instructions || config.instructions;
+        send({ type: "session.update", session: { instructions: `${baseInstructions}\n\n# Live producer direction\n${instructions}` } });
+      },
+      async sendHostText(text) {
+        send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } });
+        send({ type: "response.create" });
+      },
       async interrupt() {
         send({ type: "response.cancel" });
         send({ type: "output_audio_buffer.clear" });
       },
+      async muteInput(muted) { microphone.getAudioTracks().forEach((track) => { track.enabled = !muted; }); },
       async muteOutput(muted) {
         outputMuted = muted;
         output.muted = outputMuted;

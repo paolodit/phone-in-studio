@@ -7,7 +7,7 @@ import { StudioNav } from "@/components/StudioNav";
 import { NewShowDialog } from "@/components/NewShowDialog";
 import { readShowFormatConfig, SHOW_FORMATS } from "@/lib/show-format";
 
-const voiceRouteLabel = (provider: string) => provider === "gemini" ? "Gemini Live" : provider === "elevenlabs" ? "ElevenLabs" : "OpenAI Realtime 1.5";
+const voiceRouteLabel = (provider: string) => provider === "gemini" ? "Gemini Live" : provider === "elevenlabs" ? "ElevenLabs" : provider === "fish" ? "Fish Audio S2.1" : "OpenAI Realtime 1.5";
 
 export default async function ShowsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
   await requireAdmin();

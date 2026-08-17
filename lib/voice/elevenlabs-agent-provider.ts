@@ -81,7 +81,9 @@ export class ElevenLabsAgentVoiceProvider implements LiveVoiceProvider {
 
     return {
       async updateInstructions(instructions) { conversation.sendContextualUpdate(`Updated caller direction: ${instructions}`); },
+      async sendHostText(text) { conversation.sendUserMessage(text); },
       async interrupt() { conversation.sendUserActivity(); },
+      async muteInput(muted) { conversation.setMicMuted(muted); },
       async muteOutput(nextMuted) { muted = nextMuted; updateOutput(); },
       async setOutputVolume(volume) { outputVolume = normalized(volume); updateOutput(); },
       async switchInputDevice(deviceId) { await conversation.changeInputDevice({ inputDeviceId: deviceId, preferHeadphonesForIosDevices: true }); },

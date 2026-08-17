@@ -18,6 +18,14 @@ export type StudioCaller = {
 
 export type StudioState = {
   showStatus: ShowStatus;
+  aiHost: null | {
+    enabled: boolean;
+    mode: "HUMAN" | "AI_SUPERVISED" | "AI_AUTONOMOUS";
+    maxTurnsPerCaller: number;
+    betweenCallsSeconds: number;
+    visualPolicy: "OFF" | "PREPARE" | "AUTO_SHOW";
+    profile: null | { id: string; name: string; publicIdentity?: string | null; voiceId: string; stylePreset: string };
+  };
   caller: StudioCaller | null;
   queue: { id: string; position: number; name: string; issue: string; status: string }[];
   events: { type: string; timestamp: string; payload: Record<string, unknown> }[];
@@ -30,14 +38,27 @@ export async function getStudioState(showId: string): Promise<StudioState> {
   const show = await prisma.show.findUniqueOrThrow({
     where: { id: showId },
     include: {
-      queueItems: { include: { caller: { include: { assets: true } } }, orderBy: { position: "asc" } },
+      queueItems: { include: { caller: { include: { assets: { orderBy: { priority: "asc" } } } } }, orderBy: { position: "asc" } },
       events: { take: 30, orderBy: { timestamp: "desc" } },
       soundEffects: { orderBy: { createdAt: "asc" } },
+      moduleSettings: true,
+      hostProfile: true,
     },
   });
   const current = show.queueItems.find((item) => item.id === show.currentQueueItemId) ?? null;
+  const aiHostSetting = show.moduleSettings.find((setting) => setting.key === "AI_HOST");
+  const aiHostConfig = object(aiHostSetting?.config);
+  const visualPolicyValue = String(aiHostConfig.visualPolicy ?? (show.hostMode === "AI_AUTONOMOUS" ? "AUTO_SHOW" : "OFF"));
   return {
     showStatus: show.status,
+    aiHost: {
+      enabled: Boolean(aiHostSetting?.enabled && show.hostProfile),
+      mode: show.hostMode,
+      maxTurnsPerCaller: Math.max(1, Math.min(8, Number(aiHostConfig.maxTurnsPerCaller ?? 4))),
+      betweenCallsSeconds: Math.max(1, Math.min(15, Number(aiHostConfig.betweenCallsSeconds ?? 3))),
+      visualPolicy: (["OFF", "PREPARE", "AUTO_SHOW"].includes(visualPolicyValue) ? visualPolicyValue : "OFF") as "OFF" | "PREPARE" | "AUTO_SHOW",
+      profile: show.hostProfile ? { id: show.hostProfile.id, name: show.hostProfile.name, publicIdentity: show.hostProfile.publicIdentity, voiceId: show.hostProfile.voiceId, stylePreset: show.hostProfile.stylePreset } : null,
+    },
     caller: current ? {
       id: current.caller.id,
       name: `${current.caller.firstName}${current.caller.surnameInitial ? ` ${current.caller.surnameInitial}` : ""}`,

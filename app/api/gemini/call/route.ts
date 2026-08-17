@@ -1,18 +1,17 @@
 import {
-  ActivityHandling,
-  EndSensitivity,
   GoogleGenAI,
   Modality,
-  StartSensitivity,
   ThinkingLevel,
   type LiveConnectConfig,
 } from "@google/genai";
 import { NextResponse } from "next/server";
 import { isAdminSession } from "@/lib/auth";
+import { buildGeminiRealtimeInputConfig, GEMINI_LIVE_MAX_OUTPUT_TOKENS } from "@/lib/gemini-live";
 import { prisma } from "@/lib/prisma";
 import { buildRealtimeSessionConfig } from "@/lib/realtime-session";
 import { realtimeSessionRequestSchema } from "@/lib/schemas";
 import { readShowFormatConfig } from "@/lib/show-format";
+import { resolveOpenAIVoice } from "@/lib/voices";
 
 export const runtime = "nodejs";
 
@@ -24,15 +23,16 @@ const geminiVoices: Record<string, string> = {
   echo: "Charon",
   sage: "Kore",
   shimmer: "Aoede",
-  verse: "Kore",
+  verse: "Puck",
   marin: "Kore",
   cedar: "Fenrir",
 };
 
 function callerVoice(performance: unknown) {
   if (!performance || typeof performance !== "object" || Array.isArray(performance)) return process.env.GEMINI_LIVE_VOICE ?? "Kore";
-  const voiceId = (performance as Record<string, unknown>).voiceId;
-  return process.env.GEMINI_LIVE_VOICE ?? (typeof voiceId === "string" ? geminiVoices[voiceId] : undefined) ?? "Kore";
+  const values = performance as Record<string, unknown>;
+  const voiceId = resolveOpenAIVoice(values.voiceId, values.voicePresentation);
+  return process.env.GEMINI_LIVE_VOICE ?? geminiVoices[voiceId] ?? "Kore";
 }
 
 export async function POST(request: Request) {
@@ -62,19 +62,8 @@ export async function POST(request: Request) {
     thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    realtimeInputConfig: {
-      automaticActivityDetection: {
-        disabled: false,
-        // A deliberately conservative start threshold rejects more room noise,
-        // while the short end threshold keeps the reply hand-off responsive.
-        startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
-        endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-        prefixPaddingMs: 160,
-        silenceDurationMs: 360,
-      },
-      activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-    },
-    maxOutputTokens: 180,
+    realtimeInputConfig: buildGeminiRealtimeInputConfig(),
+    maxOutputTokens: GEMINI_LIVE_MAX_OUTPUT_TOKENS,
   };
 
   try {

@@ -10,7 +10,13 @@ export class MockVoiceProvider implements LiveVoiceProvider {
       async updateInstructions(next) {
         if (!ended) instructions = next;
       },
+      async sendHostText(text) {
+        if (!ended) config.onTranscript?.({ speaker: "HOST", text });
+      },
       async interrupt() {
+        if (ended) return;
+      },
+      async muteInput() {
         if (ended) return;
       },
       async muteOutput(next) {

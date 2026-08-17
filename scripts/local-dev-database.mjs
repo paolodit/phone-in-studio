@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mode = process.argv[2];
 const databaseUrl = "postgresql://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable&connection_limit=10&connect_timeout=0&max_idle_connection_lifetime=0&pool_timeout=0&socket_timeout=0";
 
-if (mode !== "init" && mode !== "dev" && mode !== "verify" && mode !== "realtime") throw new Error("Usage: node scripts/local-dev-database.mjs <init|dev|verify|realtime>");
+if (mode !== "init" && mode !== "dev" && mode !== "verify" && mode !== "realtime" && mode !== "demo") throw new Error("Usage: node scripts/local-dev-database.mjs <init|dev|verify|realtime|demo>");
 
 function waitFor(child) {
   return new Promise((resolve, reject) => {
@@ -36,8 +36,13 @@ if (mode === "init") {
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-local-flow.ts"]));
 } else if (mode === "realtime") {
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-realtime-session.ts"]));
+} else if (mode === "demo") {
+  await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/install-demo-callers.ts"]));
 } else {
-  const child = startNode([path.join(root, "node_modules", "next", "dist", "bin", "next"), "dev"]);
+  // Keep every local instance on the same explicit port. Next otherwise moves a
+  // second dev server to 3001/3002 while all instances still write to `.next`,
+  // which can corrupt the shared development bundle.
+  const child = startNode([path.join(root, "node_modules", "next", "dist", "bin", "next"), "dev", "--port", "3000"]);
   const stop = () => child.kill("SIGINT");
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);

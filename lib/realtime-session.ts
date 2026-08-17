@@ -2,24 +2,10 @@ import { createHmac } from "node:crypto";
 import type { Caller, CallerAsset } from "@/generated/prisma/client";
 import { buildCallerInstructions } from "@/lib/prompt";
 import type { ShowFormatConfig } from "@/lib/show-format";
-
-const supportedVoices = new Set(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
-const legacyVoiceAliases: Record<string, string> = {
-  "mock-warm-welsh": "coral",
-  "mock-dry-welsh": "cedar",
-  "mock-confident-welsh": "shimmer",
-  "mock-gravel-welsh": "echo",
-  "mock-keen-welsh": "ash",
-};
+import { resolveOpenAIVoice } from "@/lib/voices";
 
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function safeVoice(value: unknown) {
-  if (typeof value !== "string") return "marin";
-  const voice = legacyVoiceAliases[value] ?? value;
-  return supportedVoices.has(voice) ? voice : "marin";
 }
 
 function speechSpeed(value: unknown) {
@@ -42,8 +28,8 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
       worldview: String(character.worldview ?? "The caller believes their complaint is reasonable."),
       selfImage: String(character.selfImage ?? "A reasonable person."),
       actualBehaviour: String(character.actualBehaviour ?? "They are partly responsible."),
-      comicContradiction: String(character.comicContradiction ?? "Their account leaves out an important detail."),
-      emotionalBaseline: String(character.emotionalBaseline ?? "Mildly aggrieved."),
+      comicContradiction: String(character.internalTension ?? character.comicContradiction ?? ""),
+      emotionalBaseline: String(character.emotionalBaseline ?? "Start grounded and respond naturally."),
       speechStyle: String(character.speechStyle ?? "Natural conversational speech."),
       vocabularyNotes: String(character.vocabularyNotes ?? "Use clear, specific language."),
       defensivenessTriggers: Array.isArray(character.defensivenessTriggers) ? character.defensivenessTriggers.map(String) : [],
@@ -52,8 +38,8 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
       surfaceProblem: String(story.surfaceProblem ?? caller.openingSummary),
       factualTimeline: Array.isArray(story.factualTimeline) ? story.factualTimeline.map(String) : [],
       suspiciousDetails: Array.isArray(story.suspiciousDetails) ? story.suspiciousDetails.map(String) : [],
-      hiddenTruth: String(story.hiddenTruth ?? "Keep the key detail private until pressure builds."),
-      escalationBeats: Array.isArray(story.escalationBeats) ? story.escalationBeats.map(String) : [],
+      hiddenTruth: String(story.hiddenTruth ?? ""),
+      escalationBeats: Array.isArray(story.developmentBeats) ? story.developmentBeats.map(String) : Array.isArray(story.escalationBeats) ? story.escalationBeats.map(String) : [],
       exitConditions: Array.isArray(story.exitConditions) ? story.exitConditions.map(String) : ["The host ends the call."],
     },
     performance: {
@@ -86,7 +72,7 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
         // deliberate Interrupt/Space control for reliable barge-in instead.
         turn_detection: { type: "semantic_vad", eagerness: "high", create_response: true, interrupt_response: false },
       },
-      output: { voice: safeVoice(performance.voiceId), speed: speechSpeed(performance.pacing) },
+      output: { voice: resolveOpenAIVoice(performance.voiceId, performance.voicePresentation), speed: speechSpeed(performance.pacing) },
     },
     max_output_tokens: 180,
     tracing: { workflow_name: "ai-phone-in", metadata: { safety_identifier: safetyIdentifier } },

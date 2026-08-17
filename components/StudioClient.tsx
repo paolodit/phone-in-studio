@@ -1,20 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Images } from "lucide-react";
+import { AudioLines, Bot, Images, Mic2, PauseCircle } from "lucide-react";
 import type { BroadcastSnapshot } from "@/lib/public-show";
 import type { StudioControlAction } from "@/lib/schemas";
 import type { StudioState } from "@/lib/studio-state";
 import type { LiveVoiceSession } from "@/lib/voice/types";
 import type { VoiceProviderId } from "@/lib/show-format";
 import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provider";
+import { FishAudioVoiceProvider } from "@/lib/voice/fish-audio-provider";
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
+import { buildLiveDirectionInstructions, neutralLiveDirection, type LiveDirection } from "@/lib/live-direction";
 
 const text = (value: unknown) => typeof value === "string" ? value : "-";
 const textList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const emptyLevels = { input: 0, output: 0, inputBands: Array.from({ length: 12 }, () => 0), outputBands: Array.from({ length: 12 }, () => 0) };
+const directionLabels = {
+  energy: ["Very calm", "Calmer", "Baseline", "Livelier", "Animated"],
+  pace: ["Much slower", "Slower", "Baseline", "Faster", "Much faster"],
+  answerLength: ["Very brief", "Shorter", "Baseline", "Fuller", "Longest"],
+};
 
 function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerHangup" | "cheer" | "horn" | "rimshot") {
   const patterns = {
@@ -71,16 +78,38 @@ export function StudioClient({
   const [muted, setMuted] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
   const [sessionConnected, setSessionConnected] = useState(false);
+  const [liveDirection, setLiveDirection] = useState<LiveDirection>({ ...neutralLiveDirection });
   const [transcript, setTranscript] = useState<{ speaker: "HOST" | "CALLER"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [mediaPane, setMediaPane] = useState<"visuals" | "soundboard">("visuals");
+  const [aiHostPaused, setAiHostPaused] = useState(false);
+  const [aiHostBusy, setAiHostBusy] = useState(false);
+  const [autoRunActive, setAutoRunActive] = useState(false);
   const sessionRef = useRef<LiveVoiceSession | null>(null);
+  const hostAudioRef = useRef<HTMLAudioElement | null>(null);
+  const autoRunRef = useRef(false);
+  const autoReplayRequestedRef = useRef(false);
+  const autoTransitionRef = useRef(false);
+  const autoTurnTimerRef = useRef<number | null>(null);
+  const lastAutoCallerTurnRef = useRef("");
+  const autoVisualShownForCallerRef = useRef("");
+  const hostTurnCountRef = useRef(0);
+  const directionAppliedRef = useRef(false);
   const soundRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const lastAudioLevelSent = useRef(0);
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
   const caller = studioState.caller;
+  const callerTension = text(caller?.character.internalTension ?? caller?.character.comicContradiction);
+  const callerWithheldDetail = text(caller?.story.hiddenTruth);
   const visualAssets = caller?.assets.filter((asset) => asset.type === "SUPPORTING_VISUAL") ?? [];
-  const voiceProviderLabel = voiceProvider === "gemini" ? "Gemini Live" : voiceProvider === "elevenlabs" ? "ElevenLabs Agent" : "OpenAI Realtime";
+  const primaryAutoVisualId = visualAssets[0]?.id;
+  const voiceProviderLabel = voiceProvider === "gemini"
+    ? "Gemini Live"
+    : voiceProvider === "elevenlabs"
+      ? "ElevenLabs Agent"
+      : voiceProvider === "fish"
+        ? "Fish Audio"
+        : "OpenAI Realtime";
 
   const refreshStudio = useCallback(async () => {
     const response = await fetch(`/api/shows/${showId}/studio-state`, { cache: "no-store" });
@@ -105,8 +134,36 @@ export function StudioClient({
 
   useEffect(() => () => {
     window.speechSynthesis?.cancel();
+    hostAudioRef.current?.pause();
+    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
     void sessionRef.current?.endSession();
   }, []);
+
+  useEffect(() => { autoRunRef.current = autoRunActive; }, [autoRunActive]);
+
+  useEffect(() => {
+    setLiveDirection({ ...neutralLiveDirection });
+    directionAppliedRef.current = false;
+    hostTurnCountRef.current = 0;
+    lastAutoCallerTurnRef.current = "";
+    autoVisualShownForCallerRef.current = "";
+    setTranscript([]);
+  }, [caller?.id]);
+
+  useEffect(() => {
+    if (!sessionConnected || !sessionRef.current) return;
+    const isNeutral = liveDirection.energy === 0 && liveDirection.pace === 0 && liveDirection.answerLength === 0;
+    if (isNeutral && !directionAppliedRef.current) return;
+    const timer = window.setTimeout(() => {
+      void sessionRef.current?.updateInstructions(buildLiveDirectionInstructions(liveDirection))
+        .then(() => {
+          directionAppliedRef.current = true;
+          setMessage("Live caller direction updated for the next reply.");
+        })
+        .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Unable to update the live caller direction."));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [liveDirection, sessionConnected]);
 
   const persistTranscript = useCallback((entry: { speaker: "HOST" | "CALLER"; text: string }) => {
     setTranscript((entries) => [...entries, entry].slice(-24));
@@ -157,7 +214,13 @@ export function StudioClient({
   const connectRealtime = useCallback(async (updateBroadcastState: boolean) => {
     if (!caller) throw new Error("Cue a caller before connecting a voice session.");
     setVoiceStatus(`Connecting to ${voiceProviderLabel}…`);
-    const provider = voiceProvider === "gemini" ? new GeminiLiveVoiceProvider() : voiceProvider === "elevenlabs" ? new ElevenLabsAgentVoiceProvider() : new OpenAIWebRtcVoiceProvider();
+    const provider = voiceProvider === "gemini"
+      ? new GeminiLiveVoiceProvider()
+      : voiceProvider === "elevenlabs"
+        ? new ElevenLabsAgentVoiceProvider()
+        : voiceProvider === "fish"
+          ? new FishAudioVoiceProvider()
+          : new OpenAIWebRtcVoiceProvider();
     const session = await provider.createSession({
       showId,
       callerId: caller.id,
@@ -208,6 +271,7 @@ export function StudioClient({
     await sessionRef.current?.endSession();
     sessionRef.current = null;
     setSessionConnected(false);
+    directionAppliedRef.current = false;
     setVoiceStatus("No browser voice session");
     setLevels(emptyLevels);
     void fetch(`/api/shows/${showId}/audio-levels`, {
@@ -221,6 +285,10 @@ export function StudioClient({
   const control = useCallback(async (action: StudioControlAction) => {
     setBusy(true);
     try {
+      if (["EMERGENCY_STOP", "END_SHOW"].includes(action)) {
+        autoRunRef.current = false;
+        setAutoRunActive(false);
+      }
       if (action === "INTERRUPT_CALLER") await sessionRef.current?.interrupt();
       if (action === "MUTE_CALLER") {
         await sessionRef.current?.muteOutput(true);
@@ -241,6 +309,9 @@ export function StudioClient({
       }
       if (action === "END_CALL") playSynthCue("hostHangup");
       if (action === "CALLER_HANGS_UP") playSynthCue("callerHangup");
+      if (["END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action) && studioState.aiHost?.visualPolicy === "AUTO_SHOW") {
+        await triggerVisual(null).catch(() => undefined);
+      }
       if (["END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action)) await endBrowserAudio();
 
       await postControl(action);
@@ -276,7 +347,7 @@ export function StudioClient({
     } finally {
       setBusy(false);
     }
-  }, [connectRealtime, endBrowserAudio, playMockCaller, postControl]);
+  }, [connectRealtime, endBrowserAudio, playMockCaller, postControl, studioState.aiHost?.visualPolicy, triggerVisual]);
 
   const connectAiCaller = useCallback(async () => {
     setBusy(true);
@@ -289,6 +360,68 @@ export function StudioClient({
       setBusy(false);
     }
   }, [connectRealtime, snapshot.broadcastState]);
+
+  const runAiHostTurn = useCallback(async (intent: "respond" | "close" = "respond") => {
+    const profile = studioState.aiHost?.profile;
+    if (!profile || !caller || !sessionRef.current) {
+      setMessage("Connect the caller before asking the AI Host to take a turn.");
+      return false;
+    }
+    setAiHostBusy(true);
+    setAiHostPaused(false);
+    try {
+      await sessionRef.current.interrupt();
+      setVoiceStatus(`${profile.name} is preparing a response…`);
+      const response = await fetch("/api/ai-host/respond", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ showId, callerId: caller.id, transcript, intent }) });
+      const result = await response.json() as { text?: string; profileId?: string; error?: string };
+      if (!response.ok || !result.text || !result.profileId) throw new Error(result.error ?? "The AI Host could not prepare its next line.");
+      await sessionRef.current.muteInput(true);
+      const speech = await fetch("/api/ai-host/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: result.profileId, text: result.text }) });
+      if (!speech.ok) throw new Error((await speech.json() as { error?: string }).error ?? "The AI Host voice could not play.");
+      const objectUrl = URL.createObjectURL(await speech.blob());
+      const audio = new Audio(objectUrl);
+      hostAudioRef.current = audio;
+      setVoiceStatus(`${profile.name} speaking`);
+      persistTranscript({ speaker: "HOST", text: result.text });
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => { URL.revokeObjectURL(objectUrl); resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("The browser could not play the AI Host voice.")); };
+        void audio.play().catch(reject);
+      });
+      await sessionRef.current.muteInput(false);
+      if (intent === "respond") {
+        hostTurnCountRef.current += 1;
+        await sessionRef.current.sendHostText(result.text);
+        setVoiceStatus("Waiting for caller reply");
+        setMessage(`${profile.name} completed the host turn. The caller now has the exact spoken line as its prompt.`);
+      } else {
+        setVoiceStatus("Closing the call");
+        setMessage(`${profile.name} closed the call. Preparing the next caller.`);
+      }
+      return true;
+    } catch (error) {
+      await sessionRef.current?.muteInput(false).catch(() => undefined);
+      setMessage(error instanceof Error ? error.message : "The AI Host turn failed.");
+      setVoiceStatus("AI Host paused — human host can take over");
+      setAiHostPaused(true);
+      autoRunRef.current = false;
+      setAutoRunActive(false);
+      return false;
+    } finally {
+      setAiHostBusy(false);
+    }
+  }, [caller, persistTranscript, showId, studioState.aiHost?.profile, transcript]);
+
+  const takeOverFromAi = useCallback(() => {
+    autoRunRef.current = false;
+    autoReplayRequestedRef.current = false;
+    setAutoRunActive(false);
+    hostAudioRef.current?.pause();
+    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+    void sessionRef.current?.muteInput(false);
+    setAiHostPaused(true);
+    setMessage("AI Host paused. Continue through the host microphone whenever you are ready.");
+  }, []);
 
   const startMockCaller = useCallback(async () => {
     setBusy(true);
@@ -422,7 +555,7 @@ export function StudioClient({
     && studioState.queue.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status))
     && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"].includes(broadcastState);
   const canConnectAi = !sessionConnected && ["CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
-  const connectButtonLabel = `Connect ${voiceProvider === "gemini" ? "Gemini" : voiceProvider === "elevenlabs" ? "ElevenLabs" : "OpenAI"} caller`;
+  const connectButtonLabel = `Connect ${voiceProvider === "gemini" ? "Gemini" : voiceProvider === "elevenlabs" ? "ElevenLabs" : voiceProvider === "fish" ? "Fish" : "OpenAI"} caller`;
   const stateLabel = broadcastState.replaceAll("_", " ");
   const nextStep = canStart
     ? "Start the show to open the line."
@@ -457,6 +590,68 @@ export function StudioClient({
                 ? { label: "Run all callers again", run: () => void replayQueue() }
               : null;
 
+  useEffect(() => {
+    if (!autoRunActive || autoTransitionRef.current || busy || aiHostBusy) return;
+    const hasActiveCaller = ["CALLER_INCOMING", "CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
+    const runTransition = async () => {
+      autoTransitionRef.current = true;
+      try {
+        if (canReplayQueue && autoReplayRequestedRef.current) {
+          autoReplayRequestedRef.current = false;
+          await replayQueue();
+        } else if (canStart && hasQueuedCaller) {
+          await control("START_SHOW");
+        } else if (canCueNext) {
+          await control("CUE_NEXT");
+        } else if (canAnswer) {
+          setMessage(`Auto-run is bringing ${caller?.name ?? "the caller"} on air…`);
+          await new Promise((resolve) => window.setTimeout(resolve, studioState.aiHost?.betweenCallsSeconds ? studioState.aiHost.betweenCallsSeconds * 1_000 : 3_000));
+          if (autoRunRef.current) await control("ANSWER_CALL");
+        } else if (showIsLive && !hasActiveCaller && !hasQueuedCaller) {
+          await control("END_SHOW");
+          autoRunRef.current = false;
+          setAutoRunActive(false);
+          setMessage("Auto-run completed the running order and ended the show.");
+        }
+      } catch (error) {
+        autoRunRef.current = false;
+        setAutoRunActive(false);
+        setAiHostPaused(true);
+        setMessage(error instanceof Error ? `${error.message} Auto-run paused for the human host.` : "Auto-run paused for the human host.");
+      } finally {
+        autoTransitionRef.current = false;
+      }
+    };
+    void runTransition();
+  }, [aiHostBusy, autoRunActive, broadcastState, busy, caller?.name, canAnswer, canCueNext, canReplayQueue, canStart, control, hasQueuedCaller, replayQueue, showIsLive, studioState.aiHost?.betweenCallsSeconds]);
+
+  useEffect(() => {
+    const lastEntry = transcript.at(-1);
+    if (!autoRunActive || aiHostBusy || busy || !callerIsLive || !sessionConnected || lastEntry?.speaker !== "CALLER") return;
+    const callerTurnNumber = transcript.filter((entry) => entry.speaker === "CALLER").length;
+    const turnKey = `${caller?.id ?? "none"}:${callerTurnNumber}:${lastEntry.text}`;
+    if (lastAutoCallerTurnRef.current === turnKey) return;
+    lastAutoCallerTurnRef.current = turnKey;
+    if (studioState.aiHost?.visualPolicy === "AUTO_SHOW" && primaryAutoVisualId && autoVisualShownForCallerRef.current !== caller?.id) {
+      autoVisualShownForCallerRef.current = caller?.id ?? "";
+      void triggerVisual(primaryAutoVisualId).catch((error: unknown) => {
+        setMessage(error instanceof Error ? `${error.message} The call is continuing with the caller portrait.` : "The topic visual could not be shown. The call is continuing with the caller portrait.");
+      });
+    }
+    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+    autoTurnTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        if (!autoRunRef.current) return;
+        const shouldClose = hostTurnCountRef.current >= (studioState.aiHost?.maxTurnsPerCaller ?? 4);
+        const completed = await runAiHostTurn(shouldClose ? "close" : "respond");
+        if (completed && shouldClose && autoRunRef.current) await control("END_CALL");
+      })();
+    }, 900);
+    return () => {
+      if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+    };
+  }, [aiHostBusy, autoRunActive, busy, caller?.id, callerIsLive, control, primaryAutoVisualId, runAiHostTurn, sessionConnected, studioState.aiHost?.maxTurnsPerCaller, studioState.aiHost?.visualPolicy, transcript, triggerVisual]);
+
   return <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,.8fr)]">
     <section className="space-y-5">
       <div className="panel panel-pad">
@@ -476,10 +671,10 @@ export function StudioClient({
               <p className="text-xl font-bold text-white">{caller.issueHeadline}</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">{caller.openingSummary}</p>
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                <div><p className="label">Private premise</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
-                <div><p className="label">Story tension</p><p className="mt-1 text-slate-200">{text(caller.character.comicContradiction)}</p></div>
-                <div><p className="label">Character objective</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
-                <div><p className="label">Concealing</p><p className="mt-1 text-slate-200">{text(caller.story.hiddenTruth)}</p></div>
+                <div><p className="label">Reason for calling</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
+                <div><p className="label">Desired outcome</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
+                {callerTension !== "-" && callerTension.trim() && <div><p className="label">Internal tension</p><p className="mt-1 text-slate-200">{callerTension}</p></div>}
+                {callerWithheldDetail !== "-" && callerWithheldDetail.trim() && <div><p className="label">Withheld detail</p><p className="mt-1 text-slate-200">{callerWithheldDetail}</p></div>}
               </div>
             </div>
           </div>
@@ -499,15 +694,36 @@ export function StudioClient({
           <button type="button" disabled={busy} onClick={() => void triggerVisual(null)} className="button-secondary">Clear visual</button>
           {showIsLive && <button type="button" disabled={busy} onClick={() => void control("EMERGENCY_STOP")} className="button-danger">Stop all audio (Esc)</button>}
         </div>
+        {studioState.aiHost?.enabled && studioState.aiHost.mode !== "HUMAN" && studioState.aiHost.profile && <div className="mt-4 rounded-xl border border-violet-300/25 bg-violet-300/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Bot className="h-5 w-5 text-violet-200" /><div><p className="label">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? "AI Host · auto-run" : "Supervised AI Host"}</p><p className="mt-1 text-sm font-bold text-white">{studioState.aiHost.profile.name} <span className="font-normal text-slate-400">· {studioState.aiHost.profile.stylePreset}</span></p></div></div><span className={`status ${autoRunActive ? "bg-emerald-300/10 text-emerald-100" : aiHostPaused ? "bg-amber-300/10 text-amber-100" : "bg-violet-300/10 text-violet-100"}`}>{autoRunActive ? "AUTO-RUN ACTIVE" : aiHostPaused ? "HUMAN TAKEOVER" : "READY"}</span></div>
+          <p className="mt-3 text-xs leading-5 text-slate-400">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? `Auto-run answers queued callers, responds after each completed caller turn, closes after ${studioState.aiHost.maxTurnsPerCaller} presenter turns and waits ${studioState.aiHost.betweenCallsSeconds} seconds before the next call. ${studioState.aiHost.visualPolicy === "AUTO_SHOW" ? "The primary credited topic image appears after the caller opens." : studioState.aiHost.visualPolicy === "PREPARE" ? "Prepared topic images remain under manual host control." : "The output stays on the caller portrait."} It never arms itself on page load.` : "Each press creates one short presenter response, speaks it, then passes the exact line to the caller without feeding speaker audio back through the microphone."}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {studioState.aiHost.mode === "AI_AUTONOMOUS" && <button type="button" className={autoRunActive ? "button-secondary" : "button-primary"} disabled={aiHostBusy || busy || (!hasQueuedCaller && !callerCanEnd && !canReplayQueue)} onClick={() => { if (autoRunActive) { takeOverFromAi(); } else { setAiHostPaused(false); autoReplayRequestedRef.current = canReplayQueue; autoRunRef.current = true; setAutoRunActive(true); setMessage("AI Host auto-run armed. Queue and call transitions remain visible and Emergency Stop stays available."); } }}><Bot className="h-4 w-4" /> {autoRunActive ? "Pause auto-run" : "Start auto-run"}</button>}
+            <button type="button" className={studioState.aiHost.mode === "AI_AUTONOMOUS" ? "button-secondary" : "button-primary"} disabled={!callerIsLive || !sessionConnected || aiHostBusy || busy || autoRunActive} onClick={() => void runAiHostTurn()}><Bot className="h-4 w-4" /> {aiHostBusy ? "Preparing host turn…" : "AI host: one turn"}</button>
+            <button type="button" className="button-secondary" disabled={aiHostBusy} onClick={takeOverFromAi}><Mic2 className="h-4 w-4" /> Take over</button>
+            <button type="button" className="button-secondary" disabled={aiHostBusy || aiHostPaused || autoRunActive} onClick={() => setAiHostPaused(true)}><PauseCircle className="h-4 w-4" /> Pause AI host</button>
+          </div>
+        </div>}
+        {caller && sessionConnected && <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="label">Live caller direction</p><p className="mt-1 text-xs text-slate-400">Temporary nudges from the caller's authored baseline. Changes apply to the next reply.</p></div><button type="button" className="text-xs font-bold text-cyan-200 hover:text-white" onClick={() => setLiveDirection({ ...neutralLiveDirection })}>Reset</button></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {([
+              ["energy", "Energy"],
+              ["pace", "Pace"],
+              ["answerLength", "Answer length"],
+            ] as const).map(([key, label]) => <label key={key} className="rounded-lg bg-slate-950/70 p-2"><span className="flex items-center justify-between gap-2 text-xs"><b className="text-slate-200">{label}</b><span className="text-cyan-200">{directionLabels[key][liveDirection[key] + 2]}</span></span><input className="mt-2 w-full accent-cyan-300" type="range" min="-2" max="2" step="1" value={liveDirection[key]} onChange={(event) => setLiveDirection((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}
+          </div>
+        </div>}
         {canConnectAi && <p className="mt-3 text-xs text-slate-400">The main action above creates a fresh, one-use connection for this caller. You never need to manage session credentials.</p>}
         <div className="mt-4 grid gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 md:grid-cols-2">
           <div>
             <p className="label">Voice session</p>
             <p className="mt-1 text-sm text-cyan-200">{voiceStatus}</p>
-            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option></select></label>
+            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+            {voiceProvider === "fish" && <p className="mt-2 text-xs leading-5 text-slate-400">Fish is a voice-quality comparison route, not a duplex conversational model. It waits for a complete host sentence, transcribes it, prepares the caller reply, then renders Fish speech. Use <b>Interrupt</b> to stop playback deliberately.</p>}
             <p className="mt-2 text-xs text-amber-200">Use headphones during live calls to prevent feedback. Live browser audio needs Chrome or Edge at <b>http://localhost:3000</b> or an HTTPS URL; HTTP on a LAN/IP address cannot use the microphone.</p>
             {voiceProvider === "openai" && <p className="mt-2 text-xs text-slate-400">Room noise will not automatically cut off the caller. Press <b>Space</b> or use <b>Interrupt</b> when you want to speak over them.</p>}
-            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini uses conservative speech-start detection to reject more room noise, while retaining natural voice barge-in. The deliberate Interrupt control clears queued caller audio immediately.</p>}
+            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini closes the microphone stream while caller audio is playing, including a short acoustic tail, so room noise will not cut the answer short. Use Interrupt or Space for a deliberate barge-in. Host speech allows a natural pause before Gemini replies.</p>}
             {voiceProvider === "elevenlabs" && <p className="mt-2 text-xs text-slate-400">ElevenLabs uses your configured Agent with a short-lived WebRTC token. Set its API key and Agent ID in <code>.env.local</code>; use the caller editor to optionally give an individual caller a voice ID.</p>}
           </div>
           <div className="space-y-2">

@@ -13,7 +13,9 @@ export type CallerSessionConfig = {
 
 export type LiveVoiceSession = {
   updateInstructions(instructions: string): Promise<void>;
+  sendHostText(text: string): Promise<void>;
   interrupt(): Promise<void>;
+  muteInput(muted: boolean): Promise<void>;
   muteOutput(muted: boolean): Promise<void>;
   setOutputVolume(volume: number): Promise<void>;
   switchInputDevice(deviceId: string): Promise<void>;

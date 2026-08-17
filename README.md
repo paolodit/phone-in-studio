@@ -17,12 +17,16 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
   <img alt="OpenAI Realtime" src="https://img.shields.io/badge/Voice-OpenAI_Realtime-0f766e" />
   <img alt="Gemini Live optional" src="https://img.shields.io/badge/Voice-Gemini_Live_optional-1d4ed8" />
   <img alt="ElevenLabs optional" src="https://img.shields.io/badge/Voice-ElevenLabs_optional-4c1d95" />
+  <img alt="Fish Audio optional" src="https://img.shields.io/badge/Voice-Fish_Audio_optional-2563eb" />
+  <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-0f766e" /></a>
 </p>
 
 </div>
 
 > [!IMPORTANT]
 > This is a hobbyist-first, local production toolkit. One trusted admin can build callers, run shows and open the same show from a second producer browser. It deliberately avoids enterprise account and team-management infrastructure so the live workflow stays approachable.
+
+**[Roadmap and wider vision](./ROADMAP.md)** · **[MIT licence](./LICENSE)**
 
 ## The production flow
 
@@ -37,20 +41,24 @@ flowchart LR
 
 | Caller Workshop | Show workspace | Host Studio | Broadcast output |
 | --- | --- | --- | --- |
-| Develop or manually create reusable callers, voices, portraits and visuals. | Own the running order, format, voice route, sound cues and output link. | Talk to callers, manage the queue, trigger media and monitor live audio. | Present only the public caller card, selected visual and caller audio EQ. |
+| Start with one sentence, choose from six genuinely different routes, or quick-add a caller manually. Fine-tuning stays optional. | Own the running order, format, voice route, sound cues and output link. | Talk to callers, manage the queue, trigger media and monitor live audio. | Present only the public caller card, selected visual and caller audio EQ. |
 
 The format is intentionally flexible. It can support advice, audience stories, sport, discussion, competitions, specialist topics, entertainment or a format of your own.
 
 ## What works today
 
 - Multiple independent show workspaces.
-- AI-assisted caller development from one seed into six editable directions.
-- Manual caller creation, approval, archive and topic-tag workflows.
+- A deliberately shallow AI caller builder: one seed, optional call-type/tone preferences, six varied directions and one ready-to-use card.
+- Quick manual caller creation with only the on-air essentials required; identity, voice, behavioural notes and graphics are collapsible extras.
+- Searchable caller management with ready/draft/history status, topic filters, portraits and direct private soundchecks.
+- A six-caller demo pack spanning advice, personal stories and eccentric theories: Aisha, Ellie, Owen, Ruth, Baz and Priya.
 - Selectable generated avatars, OpenAI image generation, Pexels and Pixabay visuals.
 - Private caller soundchecks that cannot alter the live queue or programme output.
 - OpenAI Realtime 1.5 browser voice as the default, with host/caller meters and transcripts.
 - Optional Gemini Live routing with server-minted one-use browser credentials, native audio and adjustable VAD.
-- Optional ElevenLabs Conversational AI routing and per-caller voice IDs.
+- Optional ElevenLabs Conversational AI and Fish Audio turn-based comparison routes with per-caller voice IDs.
+- Explicit voice-presentation casting for generated and manually edited callers, with compatible OpenAI and Gemini voice selection.
+- Three temporary Host Studio direction controls for caller energy, pace and answer length.
 - Drag-and-drop running orders, caller reactivation and additions during a live show.
 - Automatic incoming, connected and host hang-up tones.
 - Optional cheer, horn, rimshot and custom soundboard cues.
@@ -58,6 +66,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - A caller-output EQ shared with the broadcast display.
 - Photographer/contributor attribution retained from stock search to the live output.
 - Privacy-filtered broadcast data that excludes private caller mechanics and API keys.
+- Two deliberately hidden automation modules: an AI Host with supervised and guarded auto-run modes, plus a staged 10–20-caller Factory. Both are off in a fresh installation and require a separate opt-in for each show.
 
 ## Quick start
 
@@ -101,6 +110,12 @@ npm run dev
 
 This starts the detached local PostgreSQL runtime and Next.js together. Leave `DATABASE_URL` unset in `.env.local` for the local workflow; the development script supplies the connection.
 
+To add or refresh the varied six-caller demo pack without resetting your own shows or callers:
+
+```powershell
+npm run db:demo
+```
+
 ## Configuration
 
 All provider credentials remain server-side. Never commit `.env.local`.
@@ -112,12 +127,19 @@ All provider credentials remain server-side. Never commit `.env.local`.
 | `OPENAI_API_KEY` | Recommended | Caller Workshop, OpenAI Realtime and AI image generation. |
 | `OPENAI_REALTIME_MODEL` | No | Overrides the default `gpt-realtime-1.5` voice model. |
 | `OPENAI_CALLER_GENERATION_MODEL` | No | Overrides the Caller Workshop model. |
+| `OPENAI_HOST_MODEL` | No | Overrides the model used to write AI Host turns. |
+| `OPENAI_HOST_TTS_MODEL` | No | Overrides the speech model used for the AI Host; defaults to `tts-1`. |
 | `OPENAI_IMAGE_MODEL` | No | Overrides the image-generation model. |
 | `GEMINI_API_KEY` | No | Enables the Gemini Live comparison route. |
 | `GEMINI_LIVE_MODEL` | No | Overrides `gemini-3.1-flash-live-preview`. |
 | `GEMINI_LIVE_VOICE` | No | Forces one Gemini prebuilt voice instead of mapping caller voices. |
 | `ELEVENLABS_API_KEY` | No | Enables the ElevenLabs Conversational AI route. |
 | `ELEVENLABS_AGENT_ID` | No | Selects the ElevenLabs Agent used for conversations. |
+| `FISH_API_KEY` | No | Enables the turn-based Fish Audio TTS/ASR comparison route. |
+| `FISH_AUDIO_MODEL` | No | Fish speech model; defaults to `s2.1-pro-free`. |
+| `FISH_AUDIO_VOICE_ID` | No | Optional global Fish voice model ID; a caller-level ID takes priority. |
+| `FISH_AUDIO_LATENCY` | No | `low`, `balanced` (default) or `normal`. |
+| `FISH_DIALOGUE_MODEL` | No | OpenAI model used to write caller turns before Fish renders them. |
 | `PEXELS_API_KEY` | No | Enables Pexels topic-image search. |
 | `PIXABAY_API_KEY` | No | Enables Pixabay search or provider fallback. |
 | `DATABASE_URL` | Production only | PostgreSQL connection for a deployed environment. |
@@ -141,7 +163,7 @@ Caller graphics can come from the stored avatar library, a custom image URL, Ope
 
 Open a caller and choose **Test voice privately**.
 
-The soundcheck supports OpenAI Realtime, Gemini Live or ElevenLabs, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
+The soundcheck supports OpenAI Realtime, Gemini Live, ElevenLabs or Fish Audio, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
 
 This test route does not update a show, running order, production event log or live broadcast display. Use headphones, hear the opening line, speak naturally and pause for the reply.
 
@@ -151,7 +173,7 @@ Open **Shows**, choose **New show**, then configure:
 
 - programme title and format;
 - show-level caller guidance;
-- OpenAI Realtime, Gemini Live or ElevenLabs voice routing;
+- OpenAI Realtime, Gemini Live, ElevenLabs or Fish Audio voice routing;
 - approved callers and their running order;
 - custom sound cues and shortcuts;
 - the private broadcast-output link.
@@ -178,13 +200,40 @@ The producer can create and approve new callers and add them to the running orde
 
 Both browsers intentionally use the same trusted local admin. Avoid editing the same caller or running order at exactly the same moment; proper organisation accounts, invitations, presence and role management are outside this hobbyist-first scope.
 
+## Optional automation modules
+
+The normal first-run experience remains a human host building or choosing callers manually. Open **Settings → Optional modules** only when you want automation. A global switch makes a module available; each show then opts into it separately under **Show options**. Disabling a global switch removes the module from normal navigation without deleting its profiles, batches or callers.
+
+### AI Host
+
+1. Enable **AI Host** under Optional modules.
+2. Create a presenter profile with a public identity, voice, style and a few behavioural sliders.
+3. Use the private soundcheck to hear one response without touching a live show.
+4. Assign the profile to a show and choose **AI host · supervised** or **AI host · auto-run**.
+5. In supervised mode, press **AI host: one turn** when the presenter should speak.
+6. In auto-run mode, choose a per-caller presenter-turn limit, delay between calls and visual policy, then deliberately press **Start auto-run** in Studio.
+
+Auto-run starts and answers queued callers, responds after completed caller turns, closes at the configured turn limit, and advances the running order. It never arms on page load. **Take over**, **Pause auto-run** and **Emergency Stop** remain authoritative, and a generation, speech or transition error pauses automation for the human host.
+
+Automated topic visuals have three policies: **Off** keeps the portrait on screen; **Prepare** gives the host three credited stock images to trigger manually; **Full auto** prepares those images and shows the primary one after the caller's opening contribution. Images are fetched while developing or accepting the candidate rather than during the live call. A missing provider key, empty search or display error falls back to the portrait and never stops the audio conversation.
+
+### Caller Factory
+
+The Factory develops **10–20 candidates per batch** from a broad editorial brief. It works in small resumable chunks, checks new headlines against the batch and existing caller library, and stores results in a separate candidate inbox. When its show enables prepared or automatic visuals, each new candidate also receives up to three topic images with creator and provider attribution. You can pause or cancel a batch, edit a candidate, reject it, restore it, or accept one or all candidates.
+
+Acceptance is the boundary: only an accepted candidate becomes a normal editable caller draft. Nothing is automatically approved, queued or sent to a broadcast. An optional show assignment gives the batch editorial context but still does not alter that show's running order.
+
 ## Voice routes
 
 ### OpenAI Realtime
 
 The default is `gpt-realtime-1.5`. The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser. Turn-taking uses high-eagerness semantic VAD so the caller responds promptly at a meaningful end-of-turn. Automatic barge-in is disabled to prevent incidental room noise cancelling a caller mid-answer; the host uses **Interrupt** or the **Space** shortcut for a deliberate cut-in.
 
-Each caller can have a supported voice, pace, speech style, response length and interruption behaviour. Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
+Each caller can have a supported voice, perceived voice-presentation preference, pace, speech style, response length and interruption behaviour. Feminine, masculine and neutral preferences are casting metadata rather than a claim about the character's identity. OpenAI and Gemini enforce a compatible voice; **Any** preserves a producer's exact choice. ElevenLabs and Fish callers can each store a provider-specific voice/model ID; otherwise that route's global or agent default remains in control.
+
+While a caller is connected, the Host Studio exposes three centred sliders: **Energy**, **Pace** and **Answer length**. They nudge the next reply relative to the saved caller card and reset for every new caller. They do not permanently edit the character. Gemini queues a change until its current answer finishes so moving a control cannot interrupt the caller.
+
+Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
 
 ### Gemini Live
 
@@ -194,10 +243,11 @@ The permanent key remains server-side. The server creates a one-use, one-minute 
 
 The current comparison settings use:
 
-- low speech-start sensitivity to reject more incidental room noise;
-- high speech-end sensitivity with 360 ms silence for a quicker hand-off;
-- automatic voice barge-in plus the Studio's explicit **Interrupt** control;
-- minimal thinking, audio input/output transcripts and a short caller response budget.
+- low speech-start sensitivity with a 650 ms speech commitment window to reject incidental room noise;
+- low speech-end sensitivity with 800 ms silence tolerance so a natural host pause stays within one turn;
+- a hard client-side microphone gate for the whole caller reply plus a short acoustic tail, preventing output echo or handling noise from becoming a false host turn;
+- no automatic microphone barge-in while the caller is answering; use the Studio's **Interrupt** control or **Space** shortcut for a deliberate cut-in;
+- minimal thinking, audio input/output transcripts and a 1,024-token runaway guard; normal answer length is controlled by the caller prompt rather than a seven-second audio ceiling.
 
 This is an optional preview route, not a promise that it will outperform OpenAI in every room. Test with the actual microphone, headphones and ambient noise you intend to use. Gemini Live sessions and preview model availability are provider constraints; see Google's [Live API guide](https://ai.google.dev/gemini-api/docs/live-api) and [ephemeral-token guidance](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).
 
@@ -206,6 +256,21 @@ This is an optional preview route, not a promise that it will outperform OpenAI 
 Set `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID`, restart the app, then select **ElevenLabs Agent** in Show options or the private soundcheck.
 
 The server requests a short-lived conversation token for each connection. Caller instructions are passed as a session override, and an optional caller voice ID can replace the Agent default.
+
+### Fish Audio S2.1
+
+Set `FISH_API_KEY`, restart the app, then select **Fish Audio S2.1 (turn-based)** in Show options or the private soundcheck. The default is Fish's `s2.1-pro-free` developer-tier model; set `FISH_AUDIO_MODEL=s2.1-pro` to compare the paid model. A Fish voice page's model ID can be stored on an individual caller, or supplied globally with `FISH_AUDIO_VOICE_ID`.
+
+Fish Audio currently supplies speech synthesis and beta speech recognition, not the conversational reasoning and duplex session used by OpenAI Realtime or Gemini Live. The adapter therefore uses a clear four-stage turn:
+
+1. conservative browser speech detection waits for a sustained host contribution and a 950 ms finishing pause;
+2. the captured host turn is transcribed by Fish ASR;
+3. the existing character prompt and `FISH_DIALOGUE_MODEL` prepare one short caller reply;
+4. Fish TTS renders the reply through the normal caller-output meter and broadcast EQ.
+
+This route deliberately ignores microphone noise while the caller is playing. **Interrupt** stops playback, but Fish cannot provide true full-duplex barge-in in this integration. It is best used to compare voice naturalness, pace and casting rather than interaction latency. `FISH_AUDIO_LATENCY=balanced` is the default compromise; `low` starts faster at a possible quality cost, while `normal` favours quality.
+
+The Fish key remains server-side. The app accepts Fish's official `FISH_API_KEY` variable and calls the documented [`POST /v1/tts`](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech) and [`POST /v1/asr`](https://docs.fish.audio/api-reference/endpoint/openapi-v1/speech-to-text) endpoints. Check Fish's live [pricing and concurrency limits](https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits) before a long show: TTS is measured by input bytes, ASR by audio duration, and the starter tier currently permits five concurrent requests.
 
 ## Broadcast output
 
@@ -236,7 +301,7 @@ The broadcast page does not emit the host microphone. Its EQ is driven by caller
 
 - `.env.local` is server-only and must not be committed.
 - The admin session uses an HTTP-only signed cookie.
-- Permanent OpenAI, Gemini and ElevenLabs keys are never returned to the browser.
+- Permanent OpenAI, Gemini, ElevenLabs and Fish Audio keys are never returned to the browser.
 - The broadcast API exposes only public identity, public issue, caller graphic and the selected visual.
 - Hidden story details, private prompts and producer notes remain inside authenticated tools.
 - Generated and stock images still require editorial, licensing and broadcast-safety review.
@@ -303,6 +368,13 @@ Confirm `GEMINI_API_KEY` is present in `.env.local`, restart the app, and use a 
 Confirm that the API key and Agent ID belong to the same account and that the Agent supports WebRTC conversations. Restart the app after changing `.env.local`.
 </details>
 
+<details>
+<summary><strong>Fish Audio cannot start or hear the host</strong></summary>
+
+Confirm `FISH_API_KEY` and `OPENAI_API_KEY` are present in `.env.local`, then restart the server. Test the caller in the private soundcheck first. A 401 usually means the Fish key is invalid; 402 indicates account credit or plan access; 422 commonly points to an invalid caller voice model ID or unsupported request. If transcription repeatedly hears nothing, use Chrome or Edge on `http://localhost:3000`, allow microphone access and finish a full sentence before pausing.
+
+</details>
+
 ## Project map
 
 ```text
@@ -317,7 +389,11 @@ public/               Bundled caller and interface assets
 
 ## Sensible next steps
 
-- Real-room comparison and tuning across OpenAI 1.5, Gemini Live and ElevenLabs.
+These are the immediate engineering priorities. The broader product directions—better phone-ins, interview practice, personal breakfast television and turning feeds into programmes—are described in the **[roadmap and vision](./ROADMAP.md)**.
+
+- Real-room comparison and tuning across OpenAI 1.5, Gemini Live, ElevenLabs and the turn-based Fish Audio route.
+- Real-show testing and recovery tuning for guarded AI Host auto-run.
+- Scheduling, cost caps and semantic duplicate detection for recurring Caller Factory batches.
 - A 1:1 output preset plus user-adjustable safe areas and theme controls.
 - Managed deployment, secrets, PostgreSQL backups and operational monitoring.
 - More robust audio reconnection, device switching and provider failover.
@@ -333,6 +409,10 @@ npm test
 npm run verify:local
 npm run verify:realtime
 ```
+
+## Licence
+
+AI Phone-In Studio is available under the **[MIT License](./LICENSE)**. Copyright © 2026 Two Guys One Cat.
 
 ---
 

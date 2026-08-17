@@ -53,6 +53,32 @@ enum BroadcastState {
   ERROR_SAFE
 }
 
+enum OptionalModuleKey {
+  AI_HOST
+  CALLER_FACTORY
+}
+
+enum HostMode {
+  HUMAN
+  AI_SUPERVISED
+  AI_AUTONOMOUS
+}
+
+enum CallerBatchStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum CallerCandidateStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 enum ShowEventType {
   SHOW_STARTED
   CALLER_INCOMING
@@ -116,6 +142,31 @@ model Caller {
   @@index([status])
 }
 
+model OptionalModuleSetting {
+  id        String            @id @default(cuid())
+  key       OptionalModuleKey @unique
+  enabled   Boolean           @default(false)
+  config    Json              @default("{}")
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model HostProfile {
+  id             String   @id @default(cuid())
+  name           String
+  publicIdentity String?
+  voiceProvider  String   @default("openai")
+  voiceId        String   @default("nova")
+  stylePreset    String   @default("gentle")
+  characteristics Json    @default("{}")
+  guidance       String?
+  boundaries     String?
+  active         Boolean  @default(true)
+  shows          Show[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model CallerAsset {
   id               String   @id @default(cuid())
   callerId         String
@@ -147,15 +198,69 @@ model Show {
   currentQueueItemId String?
   currentVisualAssetId String?
   broadcastState     BroadcastState @default(SHOW_IDLE)
+  hostMode           HostMode       @default(HUMAN)
+  hostProfileId      String?
   startedAt          DateTime?
   endedAt            DateTime?
   queueItems         QueueItem[]
   events             ShowEvent[]
   soundEffects       SoundEffect[]
+  moduleSettings     ShowModuleSetting[]
+  callerBatches      CallerGenerationBatch[]
+  hostProfile        HostProfile?   @relation(fields: [hostProfileId], references: [id], onDelete: SetNull)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
   @@index([status])
+  @@index([hostProfileId])
+}
+
+model ShowModuleSetting {
+  id        String            @id @default(cuid())
+  showId    String
+  key       OptionalModuleKey
+  enabled   Boolean           @default(false)
+  config    Json              @default("{}")
+  show      Show              @relation(fields: [showId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([showId, key])
+  @@index([showId])
+}
+
+model CallerGenerationBatch {
+  id             String            @id @default(cuid())
+  showId         String?
+  title          String
+  seed           String
+  targetCount    Int
+  generatedCount Int               @default(0)
+  status         CallerBatchStatus @default(DRAFT)
+  criteria       Json              @default("{}")
+  error          String?
+  show           Show?             @relation(fields: [showId], references: [id], onDelete: SetNull)
+  candidates     CallerCandidate[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([showId])
+  @@index([status])
+}
+
+model CallerCandidate {
+  id               String                @id @default(cuid())
+  batchId          String
+  status           CallerCandidateStatus @default(PENDING)
+  draft            Json
+  similarityKey    String
+  acceptedCallerId String?
+  batch            CallerGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([batchId, status])
+  @@unique([batchId, similarityKey])
 }
 
 model SoundEffect {
