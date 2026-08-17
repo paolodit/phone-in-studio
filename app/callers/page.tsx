@@ -5,19 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { callerTags, jsonRecord } from "@/lib/caller-tags";
 import { StudioNav } from "@/components/StudioNav";
 import { moduleEnabled } from "@/lib/modules";
+import { CallerShowTarget } from "@/components/CallerShowTarget";
+import { QuickQueueCallerButton } from "@/components/QuickQueueCallerButton";
 
-type SearchParams = { q?: string; sort?: string; status?: string; appeared?: string; tag?: string };
+type SearchParams = { q?: string; sort?: string; status?: string; appeared?: string; tag?: string; show?: string };
 const archivedStatuses = new Set(["COMPLETED", "SKIPPED", "FAILED"]);
+const activeQueueStatuses = new Set(["QUEUED", "CONNECTING", "LIVE"]);
 
 export default async function CallersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireAdmin();
   const filters = await searchParams;
-  const [callers, factoryEnabled] = await Promise.all([prisma.caller.findMany({
+  const [callers, factoryEnabled, shows] = await Promise.all([prisma.caller.findMany({
     include: {
       assets: { where: { type: "PORTRAIT" }, orderBy: { createdAt: "asc" }, take: 1 },
-      queueItems: { select: { status: true, startedAt: true } },
+      queueItems: { select: { showId: true, status: true, startedAt: true } },
     },
-  }), moduleEnabled("CALLER_FACTORY")]);
+  }), moduleEnabled("CALLER_FACTORY"), prisma.show.findMany({
+    where: { status: { in: ["DRAFT", "READY", "LIVE"] } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, title: true, status: true },
+  })]);
+  const selectedShow = shows.find((show) => show.id === filters.show) ?? shows[0] ?? null;
   const tagOptions = [...new Set(callers.flatMap((caller) => callerTags(jsonRecord(caller.generation).topicTags)))].sort((a, b) => a.localeCompare(b));
   const query = filters.q?.trim().toLowerCase() ?? "";
   const visible = callers.filter((caller) => {
@@ -39,7 +47,10 @@ export default async function CallersPage({ searchParams }: { searchParams: Prom
 
     <div className="mt-6 grid grid-cols-3 gap-2 md:max-w-xl"><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-white">{callers.length}</p><p className="mt-1 text-xs text-slate-500">total</p></div><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-emerald-200">{approvedCount}</p><p className="mt-1 text-xs text-slate-500">ready</p></div><div className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3"><p className="text-xl font-black text-cyan-200">{appearedCount}</p><p className="mt-1 text-xs text-slate-500">appeared</p></div></div>
 
+    {selectedShow ? <CallerShowTarget shows={shows} selectedShowId={selectedShow.id} /> : <section className="panel panel-pad mt-4 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">One-click queue</p><p className="mt-1 font-bold text-white">Create a show before adding callers to a running order.</p></div><Link className="button-primary" href="/shows?new=1">Create show</Link></section>}
+
     <form className="panel panel-pad mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_10rem_11rem_11rem_minmax(10rem,1fr)_auto]" action="/callers">
+      {selectedShow && <input type="hidden" name="show" value={selectedShow.id} />}
       <label><span className="label">Search</span><span className="relative block"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" /><input className="field !pl-9" name="q" defaultValue={filters.q ?? ""} placeholder="Name, topic, location…" /></span></label>
       <label><span className="label">Sort</span><select className="field" name="sort" defaultValue={filters.sort ?? "recent"}><option value="recent">Most recent</option><option value="az">A–Z</option></select></label>
       <label><span className="label">Status</span><select className="field" name="status" defaultValue={filters.status ?? "all"}><option value="all">All statuses</option><option value="DRAFT">Draft</option><option value="APPROVED">Ready</option><option value="archived">Archived</option></select></label>
@@ -47,7 +58,7 @@ export default async function CallersPage({ searchParams }: { searchParams: Prom
       <label><span className="label">Topic</span><select className="field" name="tag" defaultValue={filters.tag ?? "all"}><option value="all">All topics</option>{tagOptions.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></label>
       <button className="button-secondary self-end" type="submit">Filter</button>
     </form>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-400">{visible.length} shown{draftCount ? ` · ${draftCount} draft${draftCount === 1 ? "" : "s"}` : ""}</p>{(query || (filters.status && filters.status !== "all") || (filters.appeared && filters.appeared !== "all") || (filters.tag && filters.tag !== "all")) && <Link className="text-xs font-bold text-cyan-200 hover:text-cyan-100" href="/callers">Clear filters</Link>}</div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-400">{visible.length} shown{draftCount ? ` · ${draftCount} draft${draftCount === 1 ? "" : "s"}` : ""}</p>{(query || (filters.status && filters.status !== "all") || (filters.appeared && filters.appeared !== "all") || (filters.tag && filters.tag !== "all")) && <Link className="text-xs font-bold text-cyan-200 hover:text-cyan-100" href={selectedShow ? `/callers?show=${selectedShow.id}` : "/callers"}>Clear filters</Link>}</div>
 
     <div className="mt-3 grid gap-3">{visible.map((caller) => {
       const generation = jsonRecord(caller.generation);
@@ -55,10 +66,11 @@ export default async function CallersPage({ searchParams }: { searchParams: Prom
       const portrait = caller.assets[0]?.url;
       const appeared = caller.queueItems.some((item) => item.startedAt || item.status === "LIVE" || item.status === "COMPLETED");
       const mode = typeof generation.callMode === "string" ? generation.callMode : null;
-      return <article key={caller.id} className="panel flex items-center gap-4 p-4 transition hover:border-cyan-400/70">
+      const queuedInSelectedShow = selectedShow ? caller.queueItems.some((item) => item.showId === selectedShow.id && activeQueueStatuses.has(item.status)) : false;
+      return <article key={caller.id} className="panel flex flex-wrap items-center gap-4 p-4 transition hover:border-cyan-400/70">
         {portrait ? <img src={portrait} alt={`${caller.firstName} caller graphic`} className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 text-xl font-black text-slate-950">{caller.firstName.slice(0, 1)}</div>}
         <Link href={`/callers/${caller.id}`} className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-white">{caller.firstName} {caller.surnameInitial}</h2><span className={`status ${caller.status === "APPROVED" ? "bg-emerald-400/10 text-emerald-200" : "bg-slate-700 text-slate-200"}`}>{archivedStatuses.has(caller.status) ? "ARCHIVED" : caller.status === "APPROVED" ? "READY" : caller.status}</span>{appeared && <span className="status bg-cyan-400/10 text-cyan-200">APPEARED</span>}{mode && <span className="hidden rounded-full bg-slate-950 px-2 py-1 text-[10px] text-slate-400 sm:inline-flex">{mode}</span>}</div><p className="mt-1 truncate text-sm text-slate-200">{caller.issueHeadline}</p><p className="mt-1 text-xs text-slate-500">{caller.location}{caller.occupation ? ` · ${caller.occupation}` : ""}</p>{tags.length > 0 && <div className="mt-2 hidden flex-wrap gap-1 md:flex">{tags.slice(0, 4).map((tag) => <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-cyan-100" key={tag}>{tag}</span>)}</div>}</Link>
-        <Link className="button-secondary !min-h-9 !px-3 text-xs" href={`/callers/${caller.id}/test`}><Headphones className="h-4 w-4" /><span className="hidden sm:inline">Test</span></Link>
+        <div className="flex shrink-0 items-start gap-2"><Link className="button-secondary !min-h-9 !px-3 text-xs" href={`/callers/${caller.id}/test`}><Headphones className="h-4 w-4" /><span className="hidden sm:inline">Test</span></Link>{selectedShow && caller.status === "APPROVED" ? <QuickQueueCallerButton callerId={caller.id} showId={selectedShow.id} showTitle={selectedShow.title} initiallyQueued={queuedInSelectedShow} /> : caller.status !== "APPROVED" ? <Link className="button-secondary !min-h-9 !px-3 text-xs" href={`/callers/${caller.id}`}>Review first</Link> : null}</div>
       </article>;
     })}{visible.length === 0 && <div className="panel panel-pad text-slate-300">No callers match those filters. Clear a filter or build a new caller.</div>}</div>
   </main>;
