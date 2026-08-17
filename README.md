@@ -18,12 +18,15 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
   <img alt="Gemini Live optional" src="https://img.shields.io/badge/Voice-Gemini_Live_optional-1d4ed8" />
   <img alt="ElevenLabs optional" src="https://img.shields.io/badge/Voice-ElevenLabs_optional-4c1d95" />
   <img alt="Fish Audio optional" src="https://img.shields.io/badge/Voice-Fish_Audio_optional-2563eb" />
+  <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-0f766e" /></a>
 </p>
 
 </div>
 
 > [!IMPORTANT]
 > This is a hobbyist-first, local production toolkit. One trusted admin can build callers, run shows and open the same show from a second producer browser. It deliberately avoids enterprise account and team-management infrastructure so the live workflow stays approachable.
+
+**[Roadmap and wider vision](./ROADMAP.md)** · **[MIT licence](./LICENSE)**
 
 ## The production flow
 
@@ -240,10 +243,11 @@ The permanent key remains server-side. The server creates a one-use, one-minute 
 
 The current comparison settings use:
 
-- low speech-start sensitivity with a 400 ms speech commitment window to reject incidental room noise;
-- low speech-end sensitivity with 650 ms silence tolerance so a natural host pause stays within one turn;
+- low speech-start sensitivity with a 650 ms speech commitment window to reject incidental room noise;
+- low speech-end sensitivity with 800 ms silence tolerance so a natural host pause stays within one turn;
+- a hard client-side microphone gate for the whole caller reply plus a short acoustic tail, preventing output echo or handling noise from becoming a false host turn;
 - no automatic microphone barge-in while the caller is answering; use the Studio's **Interrupt** control or **Space** shortcut for a deliberate cut-in;
-- minimal thinking, audio input/output transcripts and a short caller response budget.
+- minimal thinking, audio input/output transcripts and a 1,024-token runaway guard; normal answer length is controlled by the caller prompt rather than a seven-second audio ceiling.
 
 This is an optional preview route, not a promise that it will outperform OpenAI in every room. Test with the actual microphone, headphones and ambient noise you intend to use. Gemini Live sessions and preview model availability are provider constraints; see Google's [Live API guide](https://ai.google.dev/gemini-api/docs/live-api) and [ephemeral-token guidance](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).
 
@@ -385,6 +389,8 @@ public/               Bundled caller and interface assets
 
 ## Sensible next steps
 
+These are the immediate engineering priorities. The broader product directions—better phone-ins, interview practice, personal breakfast television and turning feeds into programmes—are described in the **[roadmap and vision](./ROADMAP.md)**.
+
 - Real-room comparison and tuning across OpenAI 1.5, Gemini Live, ElevenLabs and the turn-based Fish Audio route.
 - Real-show testing and recovery tuning for guarded AI Host auto-run.
 - Scheduling, cost caps and semantic duplicate detection for recurring Caller Factory batches.
@@ -403,6 +409,10 @@ npm test
 npm run verify:local
 npm run verify:realtime
 ```
+
+## Licence
+
+AI Phone-In Studio is available under the **[MIT License](./LICENSE)**. Copyright © 2026 Two Guys One Cat.
 
 ---
 

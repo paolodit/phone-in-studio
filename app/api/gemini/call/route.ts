@@ -6,7 +6,7 @@ import {
 } from "@google/genai";
 import { NextResponse } from "next/server";
 import { isAdminSession } from "@/lib/auth";
-import { buildGeminiRealtimeInputConfig } from "@/lib/gemini-live";
+import { buildGeminiRealtimeInputConfig, GEMINI_LIVE_MAX_OUTPUT_TOKENS } from "@/lib/gemini-live";
 import { prisma } from "@/lib/prisma";
 import { buildRealtimeSessionConfig } from "@/lib/realtime-session";
 import { realtimeSessionRequestSchema } from "@/lib/schemas";
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     realtimeInputConfig: buildGeminiRealtimeInputConfig(),
-    maxOutputTokens: 180,
+    maxOutputTokens: GEMINI_LIVE_MAX_OUTPUT_TOKENS,
   };
 
   try {
