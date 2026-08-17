@@ -24,6 +24,18 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
 > [!IMPORTANT]
 > This is a hobbyist-first, local production toolkit. One trusted admin can build callers, run shows and open the same show from a second producer browser. It deliberately avoids enterprise account and team-management infrastructure so the live workflow stays approachable.
 
+## Demo walkthrough
+
+A live demo moves through the full production path: develop a caller, review it, run a private soundcheck, place it in a show, speak to it through a realtime voice model and send only broadcast-safe information to the public output.
+
+The repository includes a ready-to-record [90-second demo script and shot list](docs/DEMO_VIDEO.md). It is designed to show a real unscripted exchange rather than simulate one. Once the screencast is recorded, its final link will live here.
+
+## Research programme
+
+The project is also an open testbed for the practical problems that appear when conversational AI becomes a live contributor: turn-taking, deliberate interruption, latency, recovery, character consistency and human editorial control.
+
+The [research and experimentation roadmap](docs/RESEARCH_ROADMAP.md) defines repeatable comparisons across voice providers, real-room robustness tests, privacy checks and reusable evaluation material for live creative AI.
+
 ## The production flow
 
 ```mermaid
@@ -315,6 +327,10 @@ tests/                State, queue, prompt, generation and voice tests
 public/               Bundled caller and interface assets
 ```
 
+## Related open-source experiment
+
+[Build Inbox](https://github.com/paolodit/build-inbox) explored voice, screenshots and browser context as a local-first route from an informal product walkthrough to a structured Codex task. It remains a proof of concept from just before the same core workflow appeared in Codex Annotate.
+
 ## Sensible next steps
 
 - Real-room comparison and tuning across OpenAI 1.5, Gemini Live and ElevenLabs.
@@ -333,6 +349,10 @@ npm test
 npm run verify:local
 npm run verify:realtime
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).
 
 ---
 
