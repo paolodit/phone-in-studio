@@ -143,6 +143,11 @@ export async function queueApprovedCaller(showId: string, callerId: string) {
         ]);
         if (caller.status !== "APPROVED") throw new Error("Only manually approved callers may enter the live queue.");
 
+        const existing = await tx.queueItem.findFirst({
+          where: { showId, callerId, status: { in: ["QUEUED", "CONNECTING", "LIVE"] } },
+        });
+        if (existing) return existing;
+
         return tx.queueItem.create({
           data: {
             showId: show.id,

@@ -21,6 +21,14 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
   <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-0f766e" /></a>
 </p>
 
+<h2>Watch the demo</h2>
+
+<a href="https://www.youtube.com/watch?v=eZAmzG3dG9I">
+  <img src="https://img.youtube.com/vi/eZAmzG3dG9I/sddefault.jpg" alt="Watch the AI Phone-In / Studio video demo on YouTube" width="820" />
+</a>
+
+<p><strong><a href="https://www.youtube.com/watch?v=eZAmzG3dG9I">Watch the AI Phone-In / Studio demo on YouTube</a></strong></p>
+
 </div>
 
 > [!IMPORTANT]
@@ -50,7 +58,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Multiple independent show workspaces.
 - A deliberately shallow AI caller builder: one seed, optional call-type/tone preferences, six varied directions and one ready-to-use card.
 - Quick manual caller creation with only the on-air essentials required; identity, voice, behavioural notes and graphics are collapsible extras.
-- Searchable caller management with ready/draft/history status, topic filters, portraits and direct private soundchecks.
+- Searchable caller management with ready/draft/history status, topic filters, portraits, direct private soundchecks and one-click addition to a selected show.
 - A six-caller demo pack spanning advice, personal stories and eccentric theories: Aisha, Ellie, Owen, Ruth, Baz and Priya.
 - Selectable generated avatars, OpenAI image generation, Pexels and Pixabay visuals.
 - Private caller soundchecks that cannot alter the live queue or programme output.

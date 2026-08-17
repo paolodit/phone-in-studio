@@ -69,6 +69,7 @@ export async function addCallerToShowAction(showId: string, formData: FormData) 
   await queueApprovedCaller(showId, callerId);
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/studio");
+  revalidatePath("/callers");
 }
 
 export async function moveQueueItemAction(showId: string, queueItemId: string, direction: "up" | "down") {
