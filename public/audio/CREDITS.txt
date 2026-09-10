@@ -1,0 +1,72 @@
+AI PHONE-IN STUDIO — BUNDLED AUDIO
+Checked 10 September 2026. These media files are NOT covered by the app's MIT licence.
+
+BACKGROUND MUSIC — Kevin MacLeod (https://incompetech.com)
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+Licence source: https://incompetech.com/music/royalty-free/licenses/
+Official catalogue: https://incompetech.com/music/royalty-free/pieces.json
+
+All ten selections are instrumental. Files have been loudness-normalised and
+re-encoded to 160 kbps MP3. No composition edits or new vocals have been added.
+The licence permits use, adaptation and redistribution, including commercial
+use, with the required credit, licence link and indication of modifications.
+When broadcasting or publishing a recording, include the relevant track credits
+in the stream/video description or another reasonable, accessible credit location.
+Royalty-free does not mean attribution-free or a guarantee against platform claims.
+
+COPYABLE CREDIT BLOCK (covers the whole bundled music library):
+"Late Night Radio", "Cool Vibes", "Airport Lounge", "Bossa Antigua",
+"Dream Culture", "Easy Lemon", "Lobby Time", "George Street Shuffle",
+"Local Forecast", "Night on the Docks - Sax"
+Kevin MacLeod (https://incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0
+https://creativecommons.org/licenses/by/4.0/
+Audio loudness normalised and re-encoded for AI Phone-In Studio.
+
+TRACK SOURCES:
+Late Night Radio — USUAN2100003
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN2100003
+Cool Vibes — USUAN1100863
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100863
+Airport Lounge — USUAN1100806
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100806
+Bossa Antigua — USUAN1700069
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700069
+Dream Culture — USUAN1300046
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300046
+Easy Lemon — USUAN1200076
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200076
+Lobby Time — USUAN1600054
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600054
+George Street Shuffle — USUAN1300035
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300035
+Local Forecast — USUAN1300010
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300010
+Night on the Docks - Sax — USUAN1100137
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100137
+
+SOUND EFFECTS — CC0 1.0 PUBLIC DOMAIN DEDICATION
+https://creativecommons.org/publicdomain/zero/1.0/
+These authors' source pages mark the sounds CC0. Credit is not required by CC0;
+we retain creator and source information here for provenance.
+Public high-quality MP3 previews were downloaded, trimmed, level-matched and faded.
+
+Studio applause: "Applause.wav" by ZyryTSounds
+https://freesound.org/people/ZyryTSounds/sounds/219241/
+Air horn: "Airhorn" by jacksonacademyashmore
+https://freesound.org/people/jacksonacademyashmore/sounds/414208/
+Drum sting: "bdmtss.wav" by gefscream
+https://freesound.org/people/gefscream/sounds/470195/
+Incoming phone: "phone telephone ring office nice iconic close to speaker.wav" by kyles
+https://freesound.org/people/kyles/sounds/450042/
+Receiver pickup: "phone pickup hangup.flac" by kyles
+https://freesound.org/people/kyles/sounds/637750/
+Receiver down / Caller hangs up: "Phone Hangup.wav" by ThunderQuads
+https://freesound.org/people/ThunderQuads/sounds/467200/
+
+BUILD PROVENANCE
+catalog.json lists source metadata. provenance.json includes exact download URLs,
+source and packaged SHA-256 hashes, durations and modifications for every file.
+Regenerate with: node scripts/prepare-studio-audio.mjs (requires ffmpeg/ffprobe).
+This script uses public downloads only; no API keys or stock subscriptions.

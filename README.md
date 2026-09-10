@@ -76,6 +76,8 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Drag-and-drop running orders, caller reactivation and additions during a live show.
 - Automatic incoming, connected and host hang-up tones.
 - Optional cheer, horn, rimshot and custom soundboard cues.
+- Real CC0 applause, air horn, drum sting and telephone samples, with their own effects-volume control.
+- Ten bundled, vocal-free background music tracks with one-click play, repeat, music volume and immediate stop. Music credits are copyable in Studio.
 - Adaptive web, TikTok 9:16, Twitch/OBS 16:9 and transparent overlay output modes.
 - A caller-output EQ shared with the broadcast display.
 - Photographer/contributor attribution retained from stock search to the live output.
@@ -231,6 +233,16 @@ There is no redundant second step to fetch the next caller after ending a call. 
 The **live control strip stays visible while you scroll**. Answer/resume follows the state of the line; **Take the floor** (Space), mute, hold and end-call controls appear when relevant. Microphone/caller meters and caller volume stay within reach during a connected call. **Stop all** (Escape) stops local caller audio, pending AI-host speech and sound cues. Holding a caller mutes both their output and their access to the host microphone.
 
 The show workspace opens on the running order, with a searchable **Add a caller** lane alongside it. Finished callers are collapsed, not deleted. Drag queued callers to reorder them, or focus a row and use **Alt + Up/Down**. Show options, optional checks and custom sound setup stay out of the main preparation path.
+
+**On-air tools** has three compact views:
+
+- **Visuals:** image-first thumbnails, shortcut numbers and an On air badge. Long stock descriptions stay off the tiles; creator attribution on the broadcast output is unchanged.
+- **Sounds:** actual applause, air horn, drum sting and receiver recordings replace the oscillator placeholders. C/H/R/G shortcuts remain available. Effects volume also scales custom cues; Stop effects silences the soundboard without stopping music or the caller. Automatic phone sounds can be previewed without changing the call.
+- **Music:** ten instrumental tracks for conversation, intros and breaks. Click a track to play it, adjust Music volume, repeat it, or stop it. Only one music track plays at a time. A persistent playing strip remains visible when you switch back to Visuals/Sounds. Volume and repeat preferences are saved per show in this browser; playback never auto-starts after a reload.
+
+Music comes from Kevin MacLeod's catalogue under **CC BY 4.0**, which allows royalty-free use with attribution. Use **Copy music credits** and include the credit in your stream/video description. CC0 sound effects need no attribution, but their creators are documented too. See [audio sources, licences and credits](./public/audio/CREDITS.txt). These third-party audio files are licensed separately from the app's MIT code; no guarantee is made against automated platform claims.
+
+The media is bundled locally, not streamed from a stock service. Both music and effects play in the Studio tab, so OBS tab/browser-audio capture and the built-in tab recorder can include them. Use headphones to avoid feeding a music bed back into the caller microphone. **Stop all**, ending the show or leaving the Studio stops background music too.
 
 ### 5. Record and revisit the good moments
 
