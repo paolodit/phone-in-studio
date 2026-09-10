@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Bot, Images, Mic2, PauseCircle } from "lucide-react";
+import { AudioLines, Bot, Images, Mic2, PauseCircle, PhoneOff, Volume2, SlidersHorizontal } from "lucide-react";
 import type { BroadcastSnapshot } from "@/lib/public-show";
 import type { StudioControlAction } from "@/lib/schemas";
 import type { StudioState } from "@/lib/studio-state";
@@ -23,6 +24,8 @@ const directionLabels = {
   answerLength: ["Very brief", "Shorter", "Baseline", "Fuller", "Longest"],
 };
 
+const activeCueContexts = new Set<AudioContext>();
+
 function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerHangup" | "cheer" | "horn" | "rimshot") {
   const patterns = {
     incoming: { notes: [660, 880], type: "sine" as OscillatorType, duration: 0.11 },
@@ -34,6 +37,7 @@ function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerH
     rimshot: { notes: [180, 880], type: "square" as OscillatorType, duration: 0.07 },
   }[effect];
   const context = new AudioContext();
+  activeCueContexts.add(context);
   const start = context.currentTime;
   patterns.notes.forEach((frequency, index) => {
     const oscillator = context.createOscillator();
@@ -48,7 +52,7 @@ function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerH
     oscillator.start(time);
     oscillator.stop(time + patterns.duration + 0.01);
   });
-  window.setTimeout(() => void context.close(), patterns.notes.length * (patterns.duration + 0.025) * 1_000 + 250);
+  window.setTimeout(() => { activeCueContexts.delete(context); if (context.state !== "closed") void context.close(); }, patterns.notes.length * (patterns.duration + 0.025) * 1_000 + 250);
 }
 
 const eventTime = (timestamp: string) => {
@@ -69,11 +73,14 @@ export function StudioClient({
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [studioState, setStudioState] = useState(initialStudioState);
-  const [message, setMessage] = useState("Start the show, cue a caller, then answer the call to connect browser voice.");
+  const [message, setMessage] = useState("Your show is synced. The main action follows the current state of the line.");
   const [voiceStatus, setVoiceStatus] = useState("No browser voice session");
   const [inputDevices, setInputDevices] = useState<{ id: string; label: string }[]>([]);
   const [inputDeviceId, setInputDeviceId] = useState("");
   const [levels, setLevels] = useState(emptyLevels);
+  const [interruptionMode, setInterruptionMode] = useState<"guarded" | "manual">("guarded");
+  const [callerSpeaking, setCallerSpeaking] = useState(false);
+  const [replyLatency, setReplyLatency] = useState<number | null>(null);
   const [volume, setVolume] = useState(0.9);
   const [muted, setMuted] = useState(false);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
@@ -86,6 +93,8 @@ export function StudioClient({
   const [aiHostBusy, setAiHostBusy] = useState(false);
   const [autoRunActive, setAutoRunActive] = useState(false);
   const sessionRef = useRef<LiveVoiceSession | null>(null);
+  const connectionAbortRef = useRef<AbortController | null>(null);
+  const hostTurnAbortRef = useRef<AbortController | null>(null);
   const hostAudioRef = useRef<HTMLAudioElement | null>(null);
   const autoRunRef = useRef(false);
   const autoReplayRequestedRef = useRef(false);
@@ -97,6 +106,15 @@ export function StudioClient({
   const directionAppliedRef = useRef(false);
   const soundRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const lastAudioLevelSent = useRef(0);
+  const lastMeterPaint = useRef(0);
+  const audioReportInFlight = useRef(false);
+  const audioChannelRef = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(`phone-in-audio:${showId}`);
+    audioChannelRef.current = channel;
+    return () => { audioChannelRef.current = null; channel.close(); };
+  }, [showId]);
   const url = useMemo(() => `/api/shows/${showId}/events`, [showId]);
   const caller = studioState.caller;
   const callerTension = text(caller?.character.internalTension ?? caller?.character.comicContradiction);
@@ -133,6 +151,11 @@ export function StudioClient({
   }, [refreshStudio, url]);
 
   useEffect(() => () => {
+    connectionAbortRef.current?.abort();
+    hostTurnAbortRef.current?.abort();
+    soundRef.current.forEach((audio) => audio.pause());
+    activeCueContexts.forEach((context) => { if (context.state !== "closed") void context.close(); });
+    activeCueContexts.clear();
     window.speechSynthesis?.cancel();
     hostAudioRef.current?.pause();
     if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
@@ -171,19 +194,24 @@ export function StudioClient({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(entry),
-    });
+    }).catch(() => setMessage("Transcript could not be saved. Live audio continues; check your connection."));
   }, [showId]);
 
   const reportLevels = useCallback((next: typeof emptyLevels) => {
-    setLevels(next);
     const now = performance.now();
-    if (now - lastAudioLevelSent.current < 90) return;
+    // UI meters do not need to rerender the entire studio at the audio frame rate.
+    if (now - lastMeterPaint.current >= 100) { setLevels(next); lastMeterPaint.current = now; }
+    audioChannelRef.current?.postMessage({ level: next.output, bands: next.outputBands });
+    // Remote OBS/producer windows use SSE. Never build up overlapping HTTP posts.
+    if (audioReportInFlight.current || now - lastAudioLevelSent.current < 125) return;
+    audioReportInFlight.current = true;
     lastAudioLevelSent.current = now;
     void fetch(`/api/shows/${showId}/audio-levels`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ level: next.output, bands: next.outputBands }),
-    });
+      signal: AbortSignal.timeout(2_000),
+    }).catch(() => undefined).finally(() => { audioReportInFlight.current = false; });
   }, [showId]);
 
   const postControl = useCallback(async (action: StudioControlAction) => {
@@ -211,8 +239,20 @@ export function StudioClient({
     await refreshStudio();
   }, [refreshStudio, showId]);
 
+  const showVisual = useCallback(async (assetId: string | null) => {
+    try { await triggerVisual(assetId); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update the visual."); }
+  }, [triggerVisual]);
+
   const connectRealtime = useCallback(async (updateBroadcastState: boolean) => {
     if (!caller) throw new Error("Cue a caller before connecting a voice session.");
+    connectionAbortRef.current?.abort();
+    const connectionAbort = new AbortController();
+    connectionAbortRef.current = connectionAbort;
+    await sessionRef.current?.endSession();
+    sessionRef.current = null;
+    setSessionConnected(false);
+    setReplyLatency(null);
+    setCallerSpeaking(false);
     setVoiceStatus(`Connecting to ${voiceProviderLabel}…`);
     const provider = voiceProvider === "gemini"
       ? new GeminiLiveVoiceProvider()
@@ -224,18 +264,25 @@ export function StudioClient({
     const session = await provider.createSession({
       showId,
       callerId: caller.id,
+      signal: connectionAbort.signal,
       instructions: "",
       voiceId: text(caller.performance.voiceId),
       inputDeviceId: inputDeviceId || undefined,
       onTranscript: persistTranscript,
       onLevels: reportLevels,
       onStatus: setVoiceStatus,
+      interruptionMode,
+      onPlaybackChange: setCallerSpeaking,
+      onReplyLatency: setReplyLatency,
+      onDisconnected: () => { setSessionConnected(false); setCallerSpeaking(false); },
       onError: (error) => setMessage(error),
     });
+    if (connectionAbort.signal.aborted) { await session.endSession(); throw new DOMException("Caller connection cancelled", "AbortError"); }
     sessionRef.current = session;
     setSessionConnected(true);
     await session.setOutputVolume(volume);
     if (snapshot.broadcastState === "CALLER_ON_HOLD") {
+      await session.muteInput(true);
       await session.muteOutput(true);
       setMuted(true);
     }
@@ -246,7 +293,7 @@ export function StudioClient({
     setMessage(updateBroadcastState
       ? `${voiceProviderLabel} caller connected. The caller will open the conversation, then respond after each host turn.`
       : "Caller browser audio reconnected. Resume the call when you are ready to put them on air.");
-  }, [caller, inputDeviceId, persistTranscript, postControl, reportLevels, showId, snapshot.broadcastState, triggerVisual, voiceProvider, voiceProviderLabel, volume]);
+  }, [caller, inputDeviceId, interruptionMode, persistTranscript, postControl, reportLevels, showId, snapshot.broadcastState, voiceProvider, voiceProviderLabel, volume]);
 
   const playMockCaller = useCallback(() => {
     if (!caller) return;
@@ -267,6 +314,9 @@ export function StudioClient({
   }, [caller]);
 
   const endBrowserAudio = useCallback(async () => {
+    connectionAbortRef.current?.abort();
+    hostTurnAbortRef.current?.abort();
+    hostAudioRef.current?.pause();
     window.speechSynthesis?.cancel();
     await sessionRef.current?.endSession();
     sessionRef.current = null;
@@ -278,8 +328,10 @@ export function StudioClient({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ level: 0, bands: emptyLevels.outputBands }),
-    });
+    }).catch(() => undefined);
     setMuted(false);
+    setCallerSpeaking(false);
+    audioChannelRef.current?.postMessage({ level: 0, bands: emptyLevels.outputBands });
   }, [showId]);
 
   const control = useCallback(async (action: StudioControlAction) => {
@@ -288,8 +340,22 @@ export function StudioClient({
       if (["EMERGENCY_STOP", "END_SHOW"].includes(action)) {
         autoRunRef.current = false;
         setAutoRunActive(false);
+        hostAudioRef.current?.pause();
+        soundRef.current.forEach((audio) => { audio.pause(); audio.currentTime = 0; });
+        activeCueContexts.forEach((context) => { if (context.state !== "closed") void context.close(); });
+        activeCueContexts.clear();
+        window.speechSynthesis?.cancel();
+        if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
       }
-      if (action === "INTERRUPT_CALLER") await sessionRef.current?.interrupt();
+      if (action === "INTERRUPT_CALLER") {
+        hostTurnAbortRef.current?.abort();
+        hostAudioRef.current?.pause();
+        autoRunRef.current = false;
+        setAutoRunActive(false);
+        setAiHostPaused(true);
+        if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+        await sessionRef.current?.interrupt();
+      }
       if (action === "MUTE_CALLER") {
         await sessionRef.current?.muteOutput(true);
         setMuted(true);
@@ -299,11 +365,17 @@ export function StudioClient({
         setMuted(false);
       }
       if (action === "HOLD_CALLER") {
+        hostTurnAbortRef.current?.abort();
+        autoRunRef.current = false;
+        setAutoRunActive(false);
+        hostAudioRef.current?.pause();
+        await sessionRef.current?.muteInput(true);
         await sessionRef.current?.muteOutput(true);
         setMuted(true);
         window.speechSynthesis?.cancel();
       }
       if (action === "RESUME_CALLER") {
+        await sessionRef.current?.muteInput(false);
         await sessionRef.current?.muteOutput(false);
         setMuted(false);
       }
@@ -367,28 +439,40 @@ export function StudioClient({
       setMessage("Connect the caller before asking the AI Host to take a turn.");
       return false;
     }
+    hostTurnAbortRef.current?.abort();
+    const abort = new AbortController();
+    hostTurnAbortRef.current = abort;
+    const activeSession = sessionRef.current;
     setAiHostBusy(true);
     setAiHostPaused(false);
     try {
       await sessionRef.current.interrupt();
       setVoiceStatus(`${profile.name} is preparing a response…`);
-      const response = await fetch("/api/ai-host/respond", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ showId, callerId: caller.id, transcript, intent }) });
+      const response = await fetch("/api/ai-host/respond", { method: "POST", signal: abort.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ showId, callerId: caller.id, transcript, intent }) });
       const result = await response.json() as { text?: string; profileId?: string; error?: string };
       if (!response.ok || !result.text || !result.profileId) throw new Error(result.error ?? "The AI Host could not prepare its next line.");
       await sessionRef.current.muteInput(true);
-      const speech = await fetch("/api/ai-host/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: result.profileId, text: result.text }) });
+      const speech = await fetch("/api/ai-host/speech", { method: "POST", signal: abort.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: result.profileId, text: result.text }) });
       if (!speech.ok) throw new Error((await speech.json() as { error?: string }).error ?? "The AI Host voice could not play.");
       const objectUrl = URL.createObjectURL(await speech.blob());
+      if (abort.signal.aborted) { URL.revokeObjectURL(objectUrl); abort.signal.throwIfAborted(); }
       const audio = new Audio(objectUrl);
       hostAudioRef.current = audio;
       setVoiceStatus(`${profile.name} speaking`);
       persistTranscript({ speaker: "HOST", text: result.text });
-      await new Promise<void>((resolve, reject) => {
-        audio.onended = () => { URL.revokeObjectURL(objectUrl); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("The browser could not play the AI Host voice.")); };
-        void audio.play().catch(reject);
-      });
-      await sessionRef.current.muteInput(false);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => { audio.pause(); reject(new DOMException("AI host stopped", "AbortError")); };
+          const cleanup = () => abort.signal.removeEventListener("abort", onAbort);
+          audio.onended = () => { cleanup(); resolve(); };
+          audio.onerror = () => { cleanup(); reject(new Error("The browser could not play the AI Host voice.")); };
+          abort.signal.addEventListener("abort", onAbort, { once: true });
+          void audio.play().catch((error) => { cleanup(); reject(error); });
+        });
+      } finally { URL.revokeObjectURL(objectUrl); }
+      abort.signal.throwIfAborted();
+      if (sessionRef.current !== activeSession) return false;
+      await activeSession.muteInput(false);
       if (intent === "respond") {
         hostTurnCountRef.current += 1;
         await sessionRef.current.sendHostText(result.text);
@@ -400,6 +484,7 @@ export function StudioClient({
       }
       return true;
     } catch (error) {
+      if (abort.signal.aborted) return false;
       await sessionRef.current?.muteInput(false).catch(() => undefined);
       setMessage(error instanceof Error ? error.message : "The AI Host turn failed.");
       setVoiceStatus("AI Host paused — human host can take over");
@@ -408,11 +493,12 @@ export function StudioClient({
       setAutoRunActive(false);
       return false;
     } finally {
-      setAiHostBusy(false);
+      if (hostTurnAbortRef.current === abort) { hostTurnAbortRef.current = null; setAiHostBusy(false); }
     }
   }, [caller, persistTranscript, showId, studioState.aiHost?.profile, transcript]);
 
   const takeOverFromAi = useCallback(() => {
+    hostTurnAbortRef.current?.abort();
     autoRunRef.current = false;
     autoReplayRequestedRef.current = false;
     setAutoRunActive(false);
@@ -438,7 +524,7 @@ export function StudioClient({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.key !== "Escape" && event.target instanceof HTMLElement && event.target.closest("input, textarea, select, button, a, summary, [contenteditable=true]"))) return;
       const controls: Record<string, StudioControlAction> = {
         " ": "INTERRUPT_CALLER",
         e: "END_CALL",
@@ -447,14 +533,19 @@ export function StudioClient({
         Escape: "EMERGENCY_STOP",
       };
       const action = controls[event.key];
-      if (action) {
+      const state = snapshot.broadcastState;
+      const allowed = action === "EMERGENCY_STOP"
+        || (action === "INTERRUPT_CALLER" || action === "MUTE_CALLER" || action === "UNMUTE_CALLER") && state === "CALLER_LIVE" && sessionConnected
+        || action === "END_CALL" && ["CALLER_INCOMING", "CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(state)
+        || action === "CUE_NEXT" && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK"].includes(state);
+      if (action && allowed && (!busy || action === "EMERGENCY_STOP")) {
         event.preventDefault();
         void control(action);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [control, muted]);
+  }, [control, muted, snapshot.broadcastState, sessionConnected, busy]);
 
   const changeInput = async (deviceId: string) => {
     setInputDeviceId(deviceId);
@@ -516,7 +607,7 @@ export function StudioClient({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, button, a, summary, [contenteditable=true]"))) return;
       const key = event.key.toLowerCase();
       const builtIn = {
         c: { cue: "cheer" as const, message: "Played optional cheer cue." },
@@ -627,7 +718,7 @@ export function StudioClient({
 
   useEffect(() => {
     const lastEntry = transcript.at(-1);
-    if (!autoRunActive || aiHostBusy || busy || !callerIsLive || !sessionConnected || lastEntry?.speaker !== "CALLER") return;
+    if (!autoRunActive || aiHostBusy || busy || callerSpeaking || !callerIsLive || !sessionConnected || lastEntry?.speaker !== "CALLER") return;
     const callerTurnNumber = transcript.filter((entry) => entry.speaker === "CALLER").length;
     const turnKey = `${caller?.id ?? "none"}:${callerTurnNumber}:${lastEntry.text}`;
     if (lastAutoCallerTurnRef.current === turnKey) return;
@@ -650,9 +741,26 @@ export function StudioClient({
     return () => {
       if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
     };
-  }, [aiHostBusy, autoRunActive, busy, caller?.id, callerIsLive, control, primaryAutoVisualId, runAiHostTurn, sessionConnected, studioState.aiHost?.maxTurnsPerCaller, studioState.aiHost?.visualPolicy, transcript, triggerVisual]);
+  }, [aiHostBusy, autoRunActive, busy, callerSpeaking, caller?.id, callerIsLive, control, primaryAutoVisualId, runAiHostTurn, sessionConnected, studioState.aiHost?.maxTurnsPerCaller, studioState.aiHost?.visualPolicy, transcript, triggerVisual]);
 
-  return <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,.8fr)]">
+  return <div className="space-y-4">
+    <section className="live-transport" aria-label="Live controls">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${callerIsLive ? "bg-rose-400" : callerIsHeld ? "bg-amber-300" : "bg-cyan-300"}`} /><p className="eyebrow">{stateLabel}</p><span className="text-xs text-slate-400">{sessionConnected ? voiceProviderLabel : "Audio not connected"}</span></div><p className="mt-1 text-sm font-bold text-white">{caller?.name ?? "Your live line"} <span className="font-normal text-slate-400">· {callerSpeaking ? "Speaking" : nextStep}</span></p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          {primaryAction && <button type="button" disabled={busy} onClick={primaryAction.run} className="button-primary">{primaryAction.label}</button>}
+          {callerIsLive && sessionConnected && <><button type="button" disabled={busy} onClick={() => void control("INTERRUPT_CALLER")} className="button-primary">Take the floor <kbd className="shortcut-key">Space</kbd></button><button type="button" disabled={busy} aria-pressed={muted} onClick={() => void control(muted ? "UNMUTE_CALLER" : "MUTE_CALLER")} className="button-secondary"><Volume2 className="h-4 w-4" />{muted ? "Unmute" : "Mute"}</button><button type="button" disabled={busy} onClick={() => void control("HOLD_CALLER")} className="button-secondary"><PauseCircle className="h-4 w-4" />Hold</button></>}
+          {callerCanEnd && <button type="button" disabled={busy} onClick={() => void control("END_CALL")} className="button-danger"><PhoneOff className="h-4 w-4" />End call</button>}
+          {showIsLive && <button type="button" onClick={() => void control("EMERGENCY_STOP")} className="button-danger" title="Immediately stop all local audio (Escape)">Stop all <kbd className="shortcut-key">Esc</kbd></button>}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-2 text-xs"><p role="status" className="min-w-0 text-slate-300">{message}</p>{replyLatency !== null && <span className="shrink-0 text-cyan-200" title="Last semantic speech endpoint to caller stream start; excludes browser playout and end-of-turn detection">Last reply · {(replyLatency / 1000).toFixed(2)}s</span>}</div>
+      {sessionConnected && <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-white/5 pt-2">
+        {[["Host mic", levels.inputBands], ["Caller", levels.outputBands]] .map(([label, bands]) => <div key={label as string} className="flex items-center gap-2"><span className="text-[10px] font-bold uppercase text-slate-400">{label as string}</span><span className="flex h-4 w-20 items-end gap-0.5" aria-label={`${label} level`}>{(bands as number[]).map((band, index) => <i key={index} className="flex-1 rounded-sm bg-cyan-300" style={{ height: `${Math.max(8, band * 100)}%` }} />)}</span></div>)}
+        <label className="ml-auto flex items-center gap-2 text-xs text-slate-400">Caller volume<input className="w-28 accent-cyan-300" type="range" min="0" max="1" step=".05" value={volume} onChange={(event) => void changeVolume(Number(event.target.value))} /></label>
+      </div>}
+    </section>
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,.85fr)]">
     <section className="space-y-5">
       <div className="panel panel-pad">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -663,44 +771,34 @@ export function StudioClient({
           </div>
           <span className={`status ${callerIsLive ? "animate-pulse bg-rose-700 text-white" : callerIsHeld ? "bg-amber-400 text-slate-950" : "bg-slate-700 text-slate-200"}`}>{stateLabel}</span>
         </div>
-        <p className="mt-4 rounded-lg border border-cyan-400/30 bg-cyan-400/5 p-3 text-sm font-semibold text-cyan-50">Next step: {nextStep}</p>
+
         {caller && <>
-          <div className="mt-5 grid gap-4 md:grid-cols-[150px_1fr]">
-            <div className="grid aspect-square place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 via-violet-500 to-rose-500 text-5xl font-black text-slate-950">{caller.name.slice(0, 1)}</div>
+          <div className="mt-4 grid grid-cols-[72px_minmax(0,1fr)] gap-4 sm:grid-cols-[100px_minmax(0,1fr)]">
+            <div className="aspect-square overflow-hidden rounded-xl bg-slate-800">{snapshot.caller?.portraitUrl ? <img src={snapshot.caller.portraitUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-4xl font-black text-cyan-200">{caller.name.slice(0, 1)}</div>}</div>
             <div>
               <p className="text-xl font-bold text-white">{caller.issueHeadline}</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">{caller.openingSummary}</p>
-              <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+              <details className="mt-3"><summary className="cursor-pointer text-xs font-bold text-cyan-200">Private caller briefing</summary><div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
                 <div><p className="label">Reason for calling</p><p className="mt-1 text-slate-200">{text(caller.story.surfaceProblem)}</p></div>
                 <div><p className="label">Desired outcome</p><p className="mt-1 text-slate-200">{text(caller.character.centralWant)}</p></div>
                 {callerTension !== "-" && callerTension.trim() && <div><p className="label">Internal tension</p><p className="mt-1 text-slate-200">{callerTension}</p></div>}
                 {callerWithheldDetail !== "-" && callerWithheldDetail.trim() && <div><p className="label">Withheld detail</p><p className="mt-1 text-slate-200">{callerWithheldDetail}</p></div>}
-              </div>
+              </div></details>
             </div>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">{textList(caller.hostSupport.suggestedQuestions).slice(0, 3).map((prompt) => <div key={prompt} className="rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-3 text-sm text-cyan-50">{prompt}</div>)}</div>
+          <div className="mt-4 grid gap-2">{textList(caller.hostSupport.suggestedQuestions).slice(0, 3).map((prompt) => <div key={prompt} className="rounded-lg border-l-2 border-cyan-400/30 bg-cyan-400/5 px-3 py-2 text-sm text-cyan-50">{prompt}</div>)}</div>
         </>}
       </div>
 
       <div className="panel panel-pad">
-        <div className="flex flex-wrap items-center justify-between gap-3"><p className="eyebrow">Live controls</p>{primaryAction && <button type="button" disabled={busy} onClick={primaryAction.run} className="button-primary">{primaryAction.label}</button>}</div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {callerIsLive && sessionConnected && <><button type="button" disabled={busy} onClick={() => void control("INTERRUPT_CALLER")} className="button-secondary">Interrupt (Space)</button><button type="button" disabled={busy} onClick={() => void control(muted ? "UNMUTE_CALLER" : "MUTE_CALLER")} className="button-secondary">{muted ? "Unmute" : "Mute"} (M)</button><button type="button" disabled={busy} onClick={() => void control("HOLD_CALLER")} className="button-secondary">Put on hold</button></>}
-          {callerIsLive && <button type="button" disabled={busy} onClick={() => void control("MOCK_SPEAK")} className="button-secondary">Test speaker with mock line</button>}
-          {broadcastState === "CALLER_CONNECTING" && <button type="button" disabled={busy} onClick={() => void startMockCaller()} className="button-secondary">Use mock caller instead</button>}
-          {callerCanEnd && <button type="button" disabled={busy} onClick={() => void control("END_CALL")} className="button-danger">End call (E)</button>}
-          {callerIsLive && <button type="button" disabled={busy} onClick={() => void control("CALLER_HANGS_UP")} className="button-secondary">Caller hangs up</button>}
-          {callerCanSkip && <button type="button" disabled={busy} onClick={() => void control("SKIP_CALLER")} className="button-secondary">Skip caller</button>}
-          <button type="button" disabled={busy} onClick={() => void triggerVisual(null)} className="button-secondary">Clear visual</button>
-          {showIsLive && <button type="button" disabled={busy} onClick={() => void control("EMERGENCY_STOP")} className="button-danger">Stop all audio (Esc)</button>}
-        </div>
+        <p className="eyebrow">Voice & direction</p>
         {studioState.aiHost?.enabled && studioState.aiHost.mode !== "HUMAN" && studioState.aiHost.profile && <div className="mt-4 rounded-xl border border-violet-300/25 bg-violet-300/5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Bot className="h-5 w-5 text-violet-200" /><div><p className="label">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? "AI Host · auto-run" : "Supervised AI Host"}</p><p className="mt-1 text-sm font-bold text-white">{studioState.aiHost.profile.name} <span className="font-normal text-slate-400">· {studioState.aiHost.profile.stylePreset}</span></p></div></div><span className={`status ${autoRunActive ? "bg-emerald-300/10 text-emerald-100" : aiHostPaused ? "bg-amber-300/10 text-amber-100" : "bg-violet-300/10 text-violet-100"}`}>{autoRunActive ? "AUTO-RUN ACTIVE" : aiHostPaused ? "HUMAN TAKEOVER" : "READY"}</span></div>
           <p className="mt-3 text-xs leading-5 text-slate-400">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? `Auto-run answers queued callers, responds after each completed caller turn, closes after ${studioState.aiHost.maxTurnsPerCaller} presenter turns and waits ${studioState.aiHost.betweenCallsSeconds} seconds before the next call. ${studioState.aiHost.visualPolicy === "AUTO_SHOW" ? "The primary credited topic image appears after the caller opens." : studioState.aiHost.visualPolicy === "PREPARE" ? "Prepared topic images remain under manual host control." : "The output stays on the caller portrait."} It never arms itself on page load.` : "Each press creates one short presenter response, speaks it, then passes the exact line to the caller without feeding speaker audio back through the microphone."}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {studioState.aiHost.mode === "AI_AUTONOMOUS" && <button type="button" className={autoRunActive ? "button-secondary" : "button-primary"} disabled={aiHostBusy || busy || (!hasQueuedCaller && !callerCanEnd && !canReplayQueue)} onClick={() => { if (autoRunActive) { takeOverFromAi(); } else { setAiHostPaused(false); autoReplayRequestedRef.current = canReplayQueue; autoRunRef.current = true; setAutoRunActive(true); setMessage("AI Host auto-run armed. Queue and call transitions remain visible and Emergency Stop stays available."); } }}><Bot className="h-4 w-4" /> {autoRunActive ? "Pause auto-run" : "Start auto-run"}</button>}
             <button type="button" className={studioState.aiHost.mode === "AI_AUTONOMOUS" ? "button-secondary" : "button-primary"} disabled={!callerIsLive || !sessionConnected || aiHostBusy || busy || autoRunActive} onClick={() => void runAiHostTurn()}><Bot className="h-4 w-4" /> {aiHostBusy ? "Preparing host turn…" : "AI host: one turn"}</button>
-            <button type="button" className="button-secondary" disabled={aiHostBusy} onClick={takeOverFromAi}><Mic2 className="h-4 w-4" /> Take over</button>
+            <button type="button" className="button-secondary" onClick={takeOverFromAi}><Mic2 className="h-4 w-4" /> Take over</button>
             <button type="button" className="button-secondary" disabled={aiHostBusy || aiHostPaused || autoRunActive} onClick={() => setAiHostPaused(true)}><PauseCircle className="h-4 w-4" /> Pause AI host</button>
           </div>
         </div>}
@@ -715,15 +813,15 @@ export function StudioClient({
           </div>
         </div>}
         {canConnectAi && <p className="mt-3 text-xs text-slate-400">The main action above creates a fresh, one-use connection for this caller. You never need to manage session credentials.</p>}
-        <div className="mt-4 grid gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 md:grid-cols-2">
+        <details className="mt-3 rounded-xl border border-slate-700/60 bg-slate-950/50 p-3" open={!sessionConnected}><summary className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-200"><SlidersHorizontal className="h-4 w-4 text-cyan-300" />Audio setup <span className="ml-auto text-xs font-normal text-slate-400">{voiceStatus}</span></summary><div className="mt-4 grid gap-4 md:grid-cols-2">
           <div>
             <p className="label">Voice session</p>
             <p className="mt-1 text-sm text-cyan-200">{voiceStatus}</p>
             <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
             {voiceProvider === "fish" && <p className="mt-2 text-xs leading-5 text-slate-400">Fish is a voice-quality comparison route, not a duplex conversational model. It waits for a complete host sentence, transcribes it, prepares the caller reply, then renders Fish speech. Use <b>Interrupt</b> to stop playback deliberately.</p>}
-            <p className="mt-2 text-xs text-amber-200">Use headphones during live calls to prevent feedback. Live browser audio needs Chrome or Edge at <b>http://localhost:3000</b> or an HTTPS URL; HTTP on a LAN/IP address cannot use the microphone.</p>
-            {voiceProvider === "openai" && <p className="mt-2 text-xs text-slate-400">Room noise will not automatically cut off the caller. Press <b>Space</b> or use <b>Interrupt</b> when you want to speak over them.</p>}
-            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini closes the microphone stream while caller audio is playing, including a short acoustic tail, so room noise will not cut the answer short. Use Interrupt or Space for a deliberate barge-in. Host speech allows a natural pause before Gemini replies.</p>}
+            <p className="mt-2 text-xs text-amber-200">Use headphones to avoid feedback. Chrome / Edge on localhost or HTTPS is required for microphone access.</p>
+            {voiceProvider === "openai" && <label className="mt-3 block"><span className="label">Interruption style</span><select className="field" value={interruptionMode} onChange={(event) => { const mode = event.target.value as "guarded" | "manual"; setInterruptionMode(mode); sessionRef.current?.setInterruptionMode?.(mode); }}><option value="guarded">Guarded · meaningful words take the floor</option><option value="manual">Manual · Space to interrupt</option></select><span className="mt-2 block text-xs leading-5 text-slate-400">Guarded mode ignores short overlapping “uh-huhs” and acknowledgements. A clear phrase or “wait” interrupts. English transcript-based; Space always works.</span></label>}
+            {voiceProvider === "gemini" && <p className="mt-2 text-xs text-slate-400">Gemini closes the microphone stream while caller audio is playing, with a 100 ms acoustic tail, so room noise will not cut the answer short. Use Interrupt or Space for a deliberate barge-in. Host speech allows a natural pause before Gemini replies.</p>}
             {voiceProvider === "elevenlabs" && <p className="mt-2 text-xs text-slate-400">ElevenLabs uses your configured Agent with a short-lived WebRTC token. Set its API key and Agent ID in <code>.env.local</code>; use the caller editor to optionally give an individual caller a voice ID.</p>}
           </div>
           <div className="space-y-2">
@@ -735,20 +833,22 @@ export function StudioClient({
             </div>
           </div>
         </div>
-        <p className="mt-4 rounded-lg bg-slate-950 p-3 text-sm text-slate-300" role="status">{message}</p>
+        </details>
+        <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer font-bold">More controls & speaker test</summary><div className="mt-3 flex flex-wrap gap-2">{callerIsLive && <button type="button" disabled={busy} onClick={() => void control("MOCK_SPEAK")} className="button-secondary">Test speaker with mock line</button>}{broadcastState === "CALLER_CONNECTING" && <button type="button" disabled={busy} onClick={() => void startMockCaller()} className="button-secondary">Use mock caller</button>}{callerCanSkip && <button type="button" disabled={busy} onClick={() => void control("SKIP_CALLER")} className="button-secondary">Skip caller</button>}{callerIsLive && <button type="button" disabled={busy} onClick={() => void control("CALLER_HANGS_UP")} className="button-secondary">Caller hangs up</button>}</div></details>
       </div>
     </section>
 
     <aside className="space-y-5">
-      <div className="panel panel-pad"><p className="eyebrow">Up next</p><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
+      <div className="panel panel-pad"><div className="flex items-center justify-between gap-3"><p className="eyebrow">Up next</p><Link className="text-xs font-bold text-cyan-200" href={`/callers?show=${showId}`}>+ Add callers</Link></div><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
       <div className="panel panel-pad">
         <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals"><Images className="h-3.5 w-3.5" /> Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard"><AudioLines className="h-3.5 w-3.5" /> Sounds</button></div></div>
         {mediaPane === "visuals"
-          ? <><p className="mt-2 text-xs text-slate-400">Choose an image to send it to the broadcast display. Newly added caller visuals are available immediately.</p><div className="mt-3 grid grid-cols-2 gap-2">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void triggerVisual(asset.id)} className="aspect-video overflow-hidden rounded-lg border border-slate-700 bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400"><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></>
+          ? <><p className="mt-2 text-xs text-slate-400">Choose an image to send it to the broadcast display. Newly added caller visuals are available immediately.</p><button type="button" onClick={() => void showVisual(null)} className="mt-2 text-xs font-bold text-cyan-200">Clear on-air visual</button><div className="mt-3 grid max-h-80 grid-cols-2 gap-2 overflow-y-auto pr-1">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void showVisual(asset.id)} aria-pressed={snapshot.caller?.visual?.url === asset.url} className={`overflow-hidden rounded-lg border bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400 ${snapshot.caller?.visual?.url === asset.url ? "border-cyan-300 ring-1 ring-cyan-300" : "border-slate-700"}`}><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></>
           : <><p className="mt-2 text-xs text-slate-400">Incoming, connection and host hang-up tones run automatically. These are optional host triggers.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { playSynthCue("cheer"); setMessage("Played optional cheer cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Cheer [C]</button><button type="button" onClick={() => { playSynthCue("horn"); setMessage("Played optional horn cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Horn [H]</button><button type="button" onClick={() => { playSynthCue("rimshot"); setMessage("Played optional rimshot cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Rimshot [R]</button><button type="button" onClick={() => { playSynthCue("callerHangup"); setMessage("Played caller hang-up cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Caller hangs up [G]</button>{studioState.soundEffects.map((effect) => <div key={effect.id} className="rounded-lg border border-slate-700 bg-slate-950 p-2"><button type="button" onClick={() => void playSound(effect)} className="w-full text-left text-xs font-bold text-slate-100 hover:text-cyan-200">Play {effect.label}{effect.hotkey ? ` [${effect.hotkey}]` : ""}</button><button type="button" onClick={() => stopSound(effect.id)} className="mt-2 text-[10px] font-bold uppercase text-slate-500">Stop</button></div>)}</div><p className="mt-3 text-xs text-slate-500">Add URL-based custom cues and a one-character hotkey from the show page.</p></>}
       </div>
       <div className="panel panel-pad"><p className="eyebrow">Live transcript</p><div className="mt-3 max-h-48 space-y-2 overflow-auto text-xs">{transcript.length ? transcript.map((entry, index) => <p key={`${entry.speaker}-${index}`}><b className="text-cyan-300">{entry.speaker === "HOST" ? "HOST" : "CALLER"}</b> <span className="text-slate-200">{entry.text}</span></p>) : <p className="text-slate-400">Transcript events will appear and persist here during a Realtime call.</p>}</div></div>
-      <div className="panel panel-pad"><p className="eyebrow">Event log</p><div className="mt-3 max-h-40 space-y-2 overflow-auto text-xs">{studioState.events.map((event, index) => <div className="flex justify-between gap-3 border-b border-slate-800 pb-2" key={`${event.timestamp}-${index}`}><span className="text-slate-200">{event.type.replaceAll("_", " ")}</span><time className="shrink-0 text-slate-500">{eventTime(event.timestamp)}</time></div>)}</div></div>
+      <details className="panel panel-pad"><summary className="eyebrow cursor-pointer">Event log</summary><div className="mt-3 max-h-40 space-y-2 overflow-auto text-xs">{studioState.events.map((event, index) => <div className="flex justify-between gap-3 border-b border-slate-800 pb-2" key={`${event.timestamp}-${index}`}><span className="text-slate-200">{event.type.replaceAll("_", " ")}</span><time className="shrink-0 text-slate-500">{eventTime(event.timestamp)}</time></div>)}</div></details>
     </aside>
+  </div>
   </div>;
 }

@@ -30,6 +30,7 @@ export class ElevenLabsAgentVoiceProvider implements LiveVoiceProvider {
     config.onStatus?.("Getting a short-lived ElevenLabs session…");
     const response = await fetch("/api/elevenlabs/call", {
       method: "POST",
+      signal: config.signal ? AbortSignal.any([config.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ showId: config.showId, callerId: config.callerId, testMode: config.testMode ?? false }),
     });
@@ -58,24 +59,27 @@ export class ElevenLabsAgentVoiceProvider implements LiveVoiceProvider {
         },
       },
       onConnect: () => config.onStatus?.("ElevenLabs caller connected"),
-      onDisconnect: () => { if (!ended) config.onStatus?.("ElevenLabs caller disconnected"); },
+      onDisconnect: () => { if (!ended) { config.onStatus?.("ElevenLabs caller disconnected"); config.onDisconnected?.(); } },
       onError: (message) => config.onError?.(message),
       onMessage: ({ role, message }) => config.onTranscript?.({ speaker: role === "agent" ? "CALLER" : "HOST", text: message }),
-      onModeChange: ({ mode }) => config.onStatus?.(mode === "speaking" ? "Caller speaking" : "Host speaking"),
+      onModeChange: ({ mode }) => { config.onStatus?.(mode === "speaking" ? "Caller speaking" : "Host speaking"); config.onPlaybackChange?.(mode === "speaking"); },
     }) as VoiceConversation;
     updateOutput();
 
+    let lastMeasured = 0;
     const measure = () => {
       if (ended) return;
+      frame = requestAnimationFrame(measure);
+      if (performance.now() - lastMeasured < 33) return;
+      lastMeasured = performance.now();
       const inputBands = frequencyBands(conversation.getInputByteFrequencyData());
       const outputBands = frequencyBands(conversation.getOutputByteFrequencyData());
       config.onLevels?.({
         input: normalized(conversation.getInputVolume()),
-        output: normalized(conversation.getOutputVolume()),
+        output: muted ? 0 : normalized(conversation.getOutputVolume()),
         inputBands,
-        outputBands,
+        outputBands: muted ? outputBands.map(() => 0) : outputBands,
       });
-      frame = requestAnimationFrame(measure);
     };
     frame = requestAnimationFrame(measure);
 

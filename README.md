@@ -200,6 +200,10 @@ Each show owns its own Studio, running order, options and output.
 
 There is no redundant second step to fetch the next caller after ending a call. The next caller is prepared automatically, while the host controls the exact moment they go on air.
 
+The **live control strip stays visible while you scroll**. Answer/resume follows the state of the line; **Take the floor** (Space), mute, hold and end-call controls appear when relevant. Microphone/caller meters and caller volume stay within reach during a connected call. **Stop all** (Escape) stops local caller audio, pending AI-host speech and sound cues. Holding a caller mutes both their output and their access to the host microphone.
+
+The show workspace opens on the running order, with a searchable **Add a caller** lane alongside it. Finished callers are collapsed, not deleted. Drag queued callers to reorder them, or focus a row and use **Alt + Up/Down**. Show options, optional checks and custom sound setup stay out of the main preparation path.
+
 ## Simple two-producer operation
 
 Keep the **Host Studio** open for the presenter and the relevant **show workspace** open for a producer in another browser or computer.
@@ -235,7 +239,18 @@ Acceptance is the boundary: only an accepted candidate becomes a normal editable
 
 ### OpenAI Realtime
 
-The default is `gpt-realtime-1.5`. The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser. Turn-taking uses high-eagerness semantic VAD so the caller responds promptly at a meaningful end-of-turn. Automatic barge-in is disabled to prevent incidental room noise cancelling a caller mid-answer; the host uses **Interrupt** or the **Space** shortcut for a deliberate cut-in.
+The default is `gpt-realtime-1.5`. The browser captures the host microphone and creates a WebRTC offer. The server negotiates the Realtime call with `OPENAI_API_KEY`; the permanent key is never sent to the browser.
+
+**Guarded interruptions** is the default in Studio and the private soundcheck. Semantic VAD stays on at high eagerness, while the browser controls response creation and cancellation:
+
+- A normal host turn gets a reply as soon as its audio is committed at the semantic endpoint; it does not wait for transcription.
+- While the caller is speaking, short transcribed acknowledgements such as “uh-huh”, “right” and “go on” do not trigger cancellation or a second reply.
+- A meaningful phrase or explicit “wait” can take the floor. Partial transcripts need more evidence than finished ones; a new response waits for the old generation to acknowledge cancellation.
+- **Manual** mode disables the transcript guard's automatic cut-in. **Take the floor / Interrupt** remains available in either mode.
+
+This is an English transcript heuristic, not a full-duplex model or perfect speech-intent detector. It depends on provider transcription and can miss a short interjection or misread a noisy room. Compare both modes with headphones in a **private soundcheck** before going live. The underlying controls follow OpenAI's [VAD guidance](https://developers.openai.com/api/docs/guides/realtime-vad).
+
+The last-reply timing in the UI measures the semantic speech-end event to the caller-stream-start event. It **excludes** time spent deciding that the host finished and browser/audio-device playout; it is not an end-to-end latency benchmark. Replies have a 1,024-token runaway ceiling, with normal length controlled by the caller prompt rather than the former 180-token limit that could cut speech short.
 
 Each caller can have a supported voice, perceived voice-presentation preference, pace, speech style, response length and interruption behaviour. Feminine, masculine and neutral preferences are casting metadata rather than a claim about the character's identity. OpenAI and Gemini enforce a compatible voice; **Any** preserves a producer's exact choice. ElevenLabs and Fish callers can each store a provider-specific voice/model ID; otherwise that route's global or agent default remains in control.
 
@@ -252,12 +267,15 @@ The permanent key remains server-side. The server creates a one-use, one-minute 
 The current comparison settings use:
 
 - low speech-start sensitivity with a 650 ms speech commitment window to reject incidental room noise;
-- low speech-end sensitivity with 800 ms silence tolerance so a natural host pause stays within one turn;
-- a hard client-side microphone gate for the whole caller reply plus a short acoustic tail, preventing output echo or handling noise from becoming a false host turn;
+- low speech-end sensitivity with 600 ms silence tolerance so a natural host pause stays within one turn;
+- smaller input packets (1,024 samples, approximately 21 ms at 48 kHz, previously 4,096 / 85 ms);
+- a protective microphone gate for the caller reply plus a 100 ms acoustic tail, down from the previous 350 ms timer and additional 120 ms delay;
 - no automatic microphone barge-in while the caller is answering; use the Studio's **Interrupt** control or **Space** shortcut for a deliberate cut-in;
 - minimal thinking, audio input/output transcripts and a 1,024-token runaway guard; normal answer length is controlled by the caller prompt rather than a seven-second audio ceiling.
 
 This is an optional preview route, not a promise that it will outperform OpenAI in every room. Test with the actual microphone, headphones and ambient noise you intend to use. Gemini Live sessions and preview model availability are provider constraints; see Google's [Live API guide](https://ai.google.dev/gemini-api/docs/live-api) and [ephemeral-token guidance](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).
+
+In-session text now uses `sendRealtimeInput`, as required by the [Gemini 3.1 capabilities guide](https://ai.google.dev/gemini-api/docs/live-api/capabilities). A manual interruption silences local playback and rejects late audio from that turn. It does not promise immediate cancellation of remote generation while `NO_INTERRUPTION` is enabled. Gemini remains a protected, turn-taking comparison route, not the new OpenAI transcript-guarded mode.
 
 ### ElevenLabs Conversational AI
 
@@ -284,6 +302,10 @@ The Fish key remains server-side. The app accepts Fish's official `FISH_API_KEY`
 
 Open **Broadcast output** from a show workspace. Its URL contains an unguessable show token; treat the URL as private.
 
+Use **Test layouts** first to open a private output workbench. Preview all eight call/show states, 16:9, 9:16, square and a short 640 × 240 pane; toggle portraits, topic images, transparency and a clearly labelled simulated EQ. None of these controls changes the live show or plays sound. **Copy live output URL** copies the real output address with the selected layout and background mode, not a link to the simulation.
+
+The renderer uses its pane's dimensions, not the surrounding app window. Small/short panes omit the optional summary; long headlines are line-limited. Topic visuals remain edge-to-edge with a compact creator credit. Portrait TikTok output leaves extra bottom space, but placement still needs checking against your platform's current interface overlays.
+
 Recommended OBS setup:
 
 1. Add the output URL as a Browser Source.
@@ -304,6 +326,8 @@ Example URLs (retain the show's real token):
 ```
 
 The broadcast page does not emit the host microphone. Its EQ is driven by caller output reported by the Studio, so it should move only while the AI caller is producing audio.
+
+Same-browser output previews receive meter frames directly through a show-scoped `BroadcastChannel`. Separate OBS browsers and remote screens use the existing token-protected event stream. Meter updates cannot pile up overlapping HTTP requests, invalid frames are ignored, and stale signal falls back to silence. The transparent mode also clears the document background, not just the inner panel.
 
 ## Privacy and safety boundaries
 
