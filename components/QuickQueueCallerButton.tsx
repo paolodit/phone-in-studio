@@ -1,11 +1,12 @@
 "use client";
 
 import { Check, ListPlus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function QuickQueueCallerButton({ callerId, showId, showTitle, initiallyQueued }: { callerId: string; showId: string; showTitle: string; initiallyQueued: boolean }) {
   const [state, setState] = useState<"idle" | "busy" | "queued">(initiallyQueued ? "queued" : "idle");
   const [error, setError] = useState("");
+  useEffect(() => { setState(initiallyQueued ? "queued" : "idle"); setError(""); }, [initiallyQueued, showId]);
 
   const addCaller = async () => {
     if (state !== "idle") return;

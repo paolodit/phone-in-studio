@@ -123,6 +123,7 @@ export class FishAudioVoiceProvider implements LiveVoiceProvider {
       try { activeSource.stop(); } catch { /* Playback already ended. */ }
       activeSource = null;
       callerSpeaking = false;
+      config.onPlaybackChange?.(false);
     };
 
     const playCallerAudio = async (buffer: AudioBuffer) => {
@@ -134,9 +135,11 @@ export class FishAudioVoiceProvider implements LiveVoiceProvider {
         source.onended = () => {
           if (activeSource === source) activeSource = null;
           callerSpeaking = false;
+          config.onPlaybackChange?.(false);
           resolve();
         };
         callerSpeaking = true;
+        config.onPlaybackChange?.(true);
         config.onStatus?.("Fish caller speaking");
         source.start();
       });

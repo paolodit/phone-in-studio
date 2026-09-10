@@ -35,6 +35,7 @@ export function QueueOrderEditor({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFinished, setShowFinished] = useState(false);
 
   useEffect(() => setItems(initialItems), [initialItems]);
 
@@ -94,14 +95,23 @@ export function QueueOrderEditor({
   };
 
   return <div className="mt-4 space-y-2" aria-label="Caller running order">
-    <p className="text-xs text-slate-400">Drag queued callers to reorder them. Reactivate a finished caller to unlock its position, then drag it into the running order.</p>
-    {items.map((item) => {
+    <div className="flex items-center justify-between gap-2 text-xs text-slate-400"><span>{items.filter((item) => item.status === "QUEUED").length} waiting</span><span title="Focus a queued row and press Alt + Up or Down">Drag to reorder · Alt + ↑/↓</span></div>
+    {items.filter((item) => showFinished || !finishedStatuses.has(item.status)).map((item) => {
       const movable = item.status === "QUEUED";
       const canReactivate = finishedStatuses.has(item.status);
       return <div
         key={item.id}
         data-testid={`queue-item-${item.id}`}
         draggable={movable && !saving}
+        tabIndex={movable ? 0 : undefined}
+        aria-label={`${item.name}, ${item.status.toLowerCase()}, position ${item.position}`}
+        onKeyDown={(event) => {
+          if (!movable || !event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+          event.preventDefault();
+          const queued = items.filter((entry) => entry.status === "QUEUED");
+          const target = queued[queued.findIndex((entry) => entry.id === item.id) + (event.key === "ArrowUp" ? -1 : 1)];
+          if (target) move(item.id, target.id);
+        }}
         onDragStart={() => setDraggingId(item.id)}
         onDragEnd={() => setDraggingId(null)}
         onDragOver={(event) => { if (movable && draggingId && !saving) event.preventDefault(); }}
@@ -115,6 +125,7 @@ export function QueueOrderEditor({
         {canReactivate && <button type="button" className="button-secondary !min-h-8 !w-8 !px-0 text-base" disabled={saving} onClick={() => void reactivate(item)} aria-label={`Reactivate ${item.name}`} title="Reactivate caller"><RotateCcw className="h-4 w-4" /></button>}
       </div>;
     })}
+    {items.some((item) => finishedStatuses.has(item.status)) && <button type="button" className="w-full rounded-lg border border-dashed border-slate-700 p-2 text-left text-xs font-semibold text-slate-400 hover:text-white" aria-expanded={showFinished} onClick={() => setShowFinished(!showFinished)}>{showFinished ? "Hide" : "Show"} {items.filter((item) => finishedStatuses.has(item.status)).length} finished callers</button>}
     {items.length === 0 && <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">The running order is empty.</p>}
     {error && <p role="alert" className="rounded-lg bg-rose-900/30 p-3 text-sm text-rose-100">{error}</p>}
   </div>;

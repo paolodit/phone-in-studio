@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mode = process.argv[2];
 const databaseUrl = "postgresql://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable&connection_limit=10&connect_timeout=0&max_idle_connection_lifetime=0&pool_timeout=0&socket_timeout=0";
 
-if (mode !== "init" && mode !== "dev" && mode !== "verify" && mode !== "realtime" && mode !== "demo") throw new Error("Usage: node scripts/local-dev-database.mjs <init|dev|verify|realtime|demo>");
+if (!["init", "dev", "verify", "realtime", "demo", "migrate", "planner"].includes(mode)) throw new Error("Usage: node scripts/local-dev-database.mjs <init|dev|verify|realtime|demo|migrate|planner>");
 
 function waitFor(child) {
   return new Promise((resolve, reject) => {
@@ -29,7 +29,11 @@ async function ensureDatabase() {
 
 await ensureDatabase();
 
-if (mode === "init") {
+if (mode === "migrate") {
+  await waitFor(startNode([path.join(root, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"]));
+} else if (mode === "planner") {
+  await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-show-planner.ts"]));
+} else if (mode === "init") {
   await waitFor(startNode([path.join(root, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"]));
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "prisma/seed.ts"]));
 } else if (mode === "verify") {

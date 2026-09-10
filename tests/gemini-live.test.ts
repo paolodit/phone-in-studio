@@ -12,7 +12,7 @@ describe("Gemini Live turn handling", () => {
       startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
       endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
       prefixPaddingMs: 650,
-      silenceDurationMs: 800,
+      silenceDurationMs: 600,
     });
   });
 

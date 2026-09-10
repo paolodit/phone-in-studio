@@ -60,12 +60,56 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       </div>
       <div className="flex flex-wrap gap-2">
         <Link href={`/studio?show=${show.id}`} className="button-primary"><Mic2 className="h-4 w-4" /> Open Studio</Link>
+        <Link href={`/shows/${show.id}/preview`} className="button-secondary"><Monitor className="h-4 w-4" /> Test layouts</Link>
+        <Link href={`/shows/${show.id}/recordings`} className="button-secondary">Recordings & moments</Link>
         <Link href={broadcastUrl} target="_blank" className="button-secondary"><ExternalLink className="h-4 w-4" /> Broadcast output</Link>
       </div>
     </div>
 
     <nav className="mt-5 flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-2" aria-label="Show workspace"><Link href={`/studio?show=${show.id}`} className="button-secondary"><Mic2 className="h-4 w-4" /> Studio</Link><Link href={`/shows/${show.id}#running-order`} className="button-primary"><ListOrdered className="h-4 w-4" /> Running order</Link><Link href={`/shows/${show.id}?section=options#show-options`} className="button-secondary"><Settings2 className="h-4 w-4" /> Options</Link></nav>
 
+    <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+      <section id="running-order" className="panel panel-pad scroll-mt-6">
+        <div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Your line-up</p><h2 className="mt-1 text-xl font-bold text-white">Running order</h2></div><Link className="text-xs font-bold text-cyan-200" href={`/callers?show=${show.id}`}>Browse caller library →</Link></div><p className="mt-2 text-sm text-slate-400">Ready callers at the top. Finished calls stay tucked away until you need them.</p>
+        <QueueOrderEditor
+          showId={show.id}
+          items={show.queueItems.map((item) => ({
+            id: item.id,
+            position: item.position,
+            name: `${item.caller.firstName}${item.caller.surnameInitial ? ` ${item.caller.surnameInitial}` : ""}`,
+            issue: item.caller.issueHeadline,
+            status: item.status,
+          }))}
+        />
+      </section>
+
+      <div className="space-y-6">
+        <LiveQueueAdder showId={show.id} showIsLive={show.status === "LIVE"} initialCallers={approvedCallers} queuedCallerIds={show.queueItems.filter((item) => ["QUEUED", "CONNECTING", "LIVE", "ON_HOLD"].includes(item.status)).map((item) => item.callerId)} />
+        <ShowPreflight show={show} />
+
+        <details className="panel panel-pad">
+          <summary className="cursor-pointer text-sm font-bold text-slate-200">Soundboard · {show.soundEffects.length} custom cues</summary>
+          <div className="mt-3 space-y-2">
+            {show.soundEffects.map((effect) => <div key={effect.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-950 p-2 text-sm">
+              <span className="min-w-0 truncate text-slate-200">{effect.label}{effect.loop ? " · loop" : ""}</span>
+              <form action={deleteSoundEffectAction.bind(null, show.id, effect.id)}><button className="text-xs font-bold text-red-300">Remove</button></form>
+            </div>)}
+          </div>
+          <form action={addSoundEffectAction.bind(null, show.id)} className="mt-4 grid gap-3">
+            <label><span className="label">Cue label</span><input className="field" name="label" placeholder="Incoming call" required /></label>
+            <label><span className="label">Audio URL</span><input className="field" name="url" type="url" placeholder="https://…/sting.mp3" required /></label>
+            <div className="grid grid-cols-2 gap-3">
+              <label><span className="label">Volume</span><input className="field" name="volume" type="number" min="0" max="1" step="0.1" defaultValue="0.8" /></label>
+              <label><span className="label">Hotkey label</span><input className="field" name="hotkey" placeholder="F1" /></label>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300"><input name="loop" type="checkbox" /> Loop until stopped</label>
+            <button className="button-secondary">Add sound cue</button>
+          </form>
+        </details>
+        <p className="text-xs leading-5 text-slate-400">OBS link uses an unguessable show token. The public route serializes only caller name, location, issue, portrait and actively selected visual.</p>
+      </div>
+    </div>
+    <details className="panel panel-pad mt-6" open={section === "options"}><summary className="cursor-pointer text-sm font-bold text-slate-200">Show setup & output destinations</summary>
     <details id="show-options" className="mt-5 scroll-mt-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4" open={section === "options"}>
       <summary className="cursor-pointer list-none"><div className="flex items-center justify-between gap-3"><div><p className="eyebrow">Show options</p><p className="mt-1 text-sm text-slate-400">Title, format, caller guidance, voice route and show-level actions</p></div><Settings2 className="h-5 w-5 text-slate-500" /></div></summary>
       <form action={updateShowAction.bind(null, show.id)} className="mt-5 grid gap-3 border-t border-slate-700/70 pt-5 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
@@ -112,47 +156,6 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       </div>
     </section>
 
-    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
-      <section id="running-order" className="panel panel-pad scroll-mt-6">
-        <div><p className="eyebrow">Live queue</p><h2 className="mt-1 text-lg font-bold text-white">Running order</h2></div>
-        <QueueOrderEditor
-          showId={show.id}
-          items={show.queueItems.map((item) => ({
-            id: item.id,
-            position: item.position,
-            name: `${item.caller.firstName}${item.caller.surnameInitial ? ` ${item.caller.surnameInitial}` : ""}`,
-            issue: item.caller.issueHeadline,
-            status: item.status,
-          }))}
-        />
-      </section>
-
-      <div className="space-y-6">
-        <ShowPreflight show={show} />
-        <LiveQueueAdder showId={show.id} showIsLive={show.status === "LIVE"} initialCallers={approvedCallers} />
-
-        <section className="panel panel-pad">
-          <p className="eyebrow">Soundboard</p>
-          <h2 className="mt-1 text-lg font-bold text-white">Show audio cues</h2>
-          <div className="mt-3 space-y-2">
-            {show.soundEffects.map((effect) => <div key={effect.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-950 p-2 text-sm">
-              <span className="min-w-0 truncate text-slate-200">{effect.label}{effect.loop ? " · loop" : ""}</span>
-              <form action={deleteSoundEffectAction.bind(null, show.id, effect.id)}><button className="text-xs font-bold text-red-300">Remove</button></form>
-            </div>)}
-          </div>
-          <form action={addSoundEffectAction.bind(null, show.id)} className="mt-4 grid gap-3">
-            <label><span className="label">Cue label</span><input className="field" name="label" placeholder="Incoming call" required /></label>
-            <label><span className="label">Audio URL</span><input className="field" name="url" type="url" placeholder="https://…/sting.mp3" required /></label>
-            <div className="grid grid-cols-2 gap-3">
-              <label><span className="label">Volume</span><input className="field" name="volume" type="number" min="0" max="1" step="0.1" defaultValue="0.8" /></label>
-              <label><span className="label">Hotkey label</span><input className="field" name="hotkey" placeholder="F1" /></label>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300"><input name="loop" type="checkbox" /> Loop until stopped</label>
-            <button className="button-secondary">Add sound cue</button>
-          </form>
-        </section>
-        <p className="text-xs leading-5 text-slate-400">OBS link uses an unguessable show token. The public route serializes only caller name, location, issue, portrait and actively selected visual.</p>
-      </div>
-    </div>
+    </details>
   </main>;
 }

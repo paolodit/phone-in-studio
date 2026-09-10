@@ -34,12 +34,16 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
   const [busy, setBusy] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [interruptionMode, setInterruptionMode] = useState<"guarded" | "manual">("guarded");
+  const [replyLatency, setReplyLatency] = useState<number | null>(null);
+  const lastMeterPaint = useRef(0);
   const [inputDeviceId, setInputDeviceId] = useState("");
   const [inputDevices, setInputDevices] = useState<{ id: string; label: string }[]>([]);
   const [levels, setLevels] = useState<Levels>(emptyLevels);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const sessionRef = useRef<LiveVoiceSession | null>(null);
+  const connectionAbortRef = useRef<AbortController | null>(null);
   const statusRef = useRef(status);
   const levelsRef = useRef(levels);
 
@@ -67,9 +71,12 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
     };
   }, [caller.id]);
 
-  useEffect(() => () => { void sessionRef.current?.endSession(); }, []);
+  useEffect(() => () => { connectionAbortRef.current?.abort(); connectionAbortRef.current = null; void sessionRef.current?.endSession(); }, []);
 
   const end = useCallback(async () => {
+    connectionAbortRef.current?.abort();
+    connectionAbortRef.current = null;
+    setBusy(false);
     const active = sessionRef.current;
     sessionRef.current = null;
     setSession(null);
@@ -85,8 +92,13 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
   const connect = async () => {
     setBusy(true);
     setTranscript([]);
+    setReplyLatency(null);
+    connectionAbortRef.current?.abort();
+    if (sessionRef.current) await end();
+    setBusy(true);
+    const attempt = new AbortController();
+    connectionAbortRef.current = attempt;
     try {
-      if (sessionRef.current) await end();
       const provider = providerId === "gemini"
         ? new GeminiLiveVoiceProvider()
         : providerId === "elevenlabs"
@@ -98,10 +110,14 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
         callerId: caller.id,
         showId: `private-test-${caller.id}`,
         testMode: true,
+        signal: attempt.signal,
         instructions: "Private caller soundcheck",
         voiceId: caller.voiceId,
         inputDeviceId: inputDeviceId || undefined,
         onStatus: updateStatus,
+        interruptionMode,
+        onReplyLatency: setReplyLatency,
+        onDisconnected: () => { setSession(null); setLevels(emptyLevels); levelsRef.current = emptyLevels; publish({ type: "levels", levels: emptyLevels }); publish({ type: "connected", connected: false }); },
         onError: (error) => setMessage(error),
         onTranscript: (entry) => {
           setTranscript((current) => [...current, entry]);
@@ -109,21 +125,24 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
         },
         onLevels: (nextLevels) => {
           levelsRef.current = nextLevels;
-          setLevels(nextLevels);
+          if (performance.now() - lastMeterPaint.current > 100) { setLevels(nextLevels); lastMeterPaint.current = performance.now(); }
           publish({ type: "levels", levels: nextLevels });
         },
       });
+      if (attempt.signal.aborted) { await nextSession.endSession(); return; }
       sessionRef.current = nextSession;
       setSession(nextSession);
+      await nextSession.setOutputVolume(volume);
       setInputDevices(await listMicrophones());
       publish({ type: "connected", connected: true });
       setMessage("Private caller connected. Let them open, then speak naturally and pause for their reply.");
     } catch (error) {
+      if (attempt.signal.aborted) return;
       const detail = error instanceof Error ? error.message : "Unable to start the private soundcheck.";
       setMessage(detail);
       updateStatus("Soundcheck could not connect");
     } finally {
-      setBusy(false);
+      if (connectionAbortRef.current === attempt) { connectionAbortRef.current = null; setBusy(false); }
     }
   };
 
@@ -156,7 +175,7 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
       <div className="panel panel-pad">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">Voice connection</p><h2 className="mt-1 text-lg font-bold text-white">{status}</h2></div><span className={`status ${session ? "bg-emerald-400 text-emerald-950" : "bg-slate-800 text-slate-300"}`}>{session ? "Test connected" : "Off air"}</span></div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session)}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session) || busy}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
           <label><span className="label">Host microphone</span><select className="field" value={inputDeviceId} onChange={(event) => void changeInput(event.target.value)} disabled={!session}><option value="">Default microphone</option>{inputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
@@ -165,8 +184,10 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
             <button type="button" className="button-secondary" onClick={() => void toggleMute()}>{muted ? <Volume2 className="h-4 w-4" /> : <MicOff className="h-4 w-4" />} {muted ? "Unmute caller" : "Mute caller"}</button>
             <button type="button" className="button-danger" onClick={() => void end()}><PhoneOff className="h-4 w-4" /> End soundcheck</button>
           </>}
+          {busy && !session && <button type="button" className="button-secondary" onClick={() => void end()}>Cancel connection</button>}
         </div>
-        {providerId === "openai" && <p className="mt-3 text-xs text-slate-400">Automatic noise-triggered barge-in is off. Use <b>Interrupt caller</b> when you want to cut the response short.</p>}
+        {providerId === "openai" && <label className="mt-3 block"><span className="label">Interruption style</span><select className="field" value={interruptionMode} onChange={(event) => { const mode = event.target.value as "guarded" | "manual"; setInterruptionMode(mode); session?.setInterruptionMode?.(mode); }}><option value="guarded">Guarded · meaningful words take the floor</option><option value="manual">Manual · button to interrupt</option></select><span className="mt-2 block text-xs text-slate-400">Try an overlapping “uh-huh”, then a clear question or “wait”. Brief acknowledgements should not cancel the caller. English transcript-based; manual interrupt is always available.</span></label>}
+        {replyLatency !== null && <p className="mt-3 text-xs text-cyan-200">Last reply: {(replyLatency / 1000).toFixed(2)}s from semantic speech endpoint to caller stream start. This excludes end-of-turn detection and browser playout.</p>}
         {providerId === "gemini" && <p className="mt-3 text-xs text-slate-400">Gemini closes the microphone stream while caller audio is playing, including a short acoustic tail, so room noise and brief sounds do not cut an answer short. Use <b>Interrupt caller</b> for a deliberate cut-in. Host speech allows a natural pause before the turn is sent.</p>}
         {providerId === "fish" && <p className="mt-3 text-xs text-slate-400">Fish Audio is tested as a turn-based voice pipeline. Finish a complete sentence and pause; conservative speech detection sends that host turn to Fish transcription, then renders the caller reply with Fish S2.1. It cannot provide true duplex barge-in.</p>}
         <label className="mt-5 block"><span className="label">Caller volume</span><input className="mt-2 w-full accent-cyan-300" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => void changeVolume(Number(event.target.value))} disabled={!session} /></label>

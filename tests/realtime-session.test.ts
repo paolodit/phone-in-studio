@@ -19,10 +19,11 @@ describe("Realtime caller session configuration", () => {
     expect(config.audio.input.turn_detection).toEqual({
       type: "semantic_vad",
       eagerness: "high",
-      create_response: true,
+      create_response: false,
       interrupt_response: false,
     });
     expect(config.instructions).toContain("Stop output immediately");
+    expect(config.max_output_tokens).toBe(1_024);
     expect(JSON.stringify(config)).not.toContain("OPENAI_API_KEY");
   });
 

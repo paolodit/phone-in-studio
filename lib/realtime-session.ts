@@ -67,14 +67,15 @@ export function buildRealtimeSessionConfig(caller: Caller & { assets?: CallerAss
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
         // Semantic VAD waits for a meaningful end-of-turn instead of treating
         // every short pause as a hand-off. High eagerness keeps replies quick.
-        // Automatic barge-in stays off because incidental room noise can be
-        // mistaken for speech and cancel a caller mid-answer; the host has a
-        // deliberate Interrupt/Space control for reliable barge-in instead.
-        turn_detection: { type: "semantic_vad", eagerness: "high", create_response: true, interrupt_response: false },
+        // The browser answers at the semantic endpoint. Overlapping speech
+        // must pass its transcript guard before cancelling audible output.
+        turn_detection: { type: "semantic_vad", eagerness: "high", create_response: false, interrupt_response: false },
       },
       output: { voice: resolveOpenAIVoice(performance.voiceId, performance.voicePresentation), speed: speechSpeed(performance.pacing) },
     },
-    max_output_tokens: 180,
+    // Audio consumes tokens too. Let the prompt keep replies brief, not a
+    // seven-second ceiling that can cut a normal sentence in half.
+    max_output_tokens: 1_024,
     tracing: { workflow_name: "ai-phone-in", metadata: { safety_identifier: safetyIdentifier } },
   };
 }

@@ -2,9 +2,14 @@ export type CallerSessionConfig = {
   callerId: string;
   showId: string;
   testMode?: boolean;
+  signal?: AbortSignal;
   instructions: string;
   voiceId: string;
   inputDeviceId?: string;
+  interruptionMode?: "guarded" | "manual";
+  onPlaybackChange?: (speaking: boolean) => void;
+  onReplyLatency?: (milliseconds: number) => void;
+  onDisconnected?: () => void;
   onTranscript?: (entry: { speaker: "HOST" | "CALLER"; text: string }) => void;
   onLevels?: (levels: { input: number; output: number; inputBands: number[]; outputBands: number[] }) => void;
   onStatus?: (status: string) => void;
@@ -19,6 +24,7 @@ export type LiveVoiceSession = {
   muteOutput(muted: boolean): Promise<void>;
   setOutputVolume(volume: number): Promise<void>;
   switchInputDevice(deviceId: string): Promise<void>;
+  setInterruptionMode?(mode: "guarded" | "manual"): void;
   endSession(): Promise<void>;
 };
 

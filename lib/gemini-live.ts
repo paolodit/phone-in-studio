@@ -19,10 +19,10 @@ export function buildGeminiRealtimeInputConfig(): RealtimeInputConfig {
       startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
       endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
       prefixPaddingMs: 650,
-      silenceDurationMs: 800,
+      silenceDurationMs: 600,
     },
     // Incidental room noise must not cut off a caller. A producer can still
-    // barge in deliberately through sendClientContent via the Interrupt control.
+    // stop local playback deliberately through the Interrupt control.
     activityHandling: ActivityHandling.NO_INTERRUPTION,
   };
 }

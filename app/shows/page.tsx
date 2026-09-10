@@ -18,6 +18,7 @@ export default async function ShowsPage({ searchParams }: { searchParams: Promis
     <section>
         <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">Show workspaces</p><h1 className="title mt-1">Your phone-ins</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">Each show owns its running order, live studio, broadcast output, format and sound cues.</p></div><NewShowDialog action={createShowAction} initialOpen={query.new === "1"} /></div>
 
+        <Link href="/shows/plan" className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-cyan-300/25 bg-gradient-to-r from-cyan-950/50 to-slate-900 p-6 hover:border-cyan-300/60"><div><p className="eyebrow">Have a spark?</p><h2 className="mt-2 text-xl font-bold text-white">Make tonight’s show</h2><p className="mt-2 text-sm text-slate-300">One brief. A varied line-up. Yours to shape before it goes on air.</p></div><span className="button-primary">Plan a show →</span></Link>
         <div className="mt-6 grid gap-4 xl:grid-cols-2">{shows.map((show) => {
           const config = readShowFormatConfig(show.brandingConfig, show.title);
           const formatLabel = SHOW_FORMATS.find((format) => format.id === config.formatId)?.label ?? "Custom phone-in";
