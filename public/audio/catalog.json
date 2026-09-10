@@ -1,0 +1,23 @@
+{
+  "music": [
+    { "id": "late-night-radio", "title": "Late Night Radio", "mood": "Late-night / warm lo-fi", "bpm": 72, "duration": "4:24", "sourceFile": "Late Night Radio.mp3", "isrc": "USUAN2100003" },
+    { "id": "cool-vibes", "title": "Cool Vibes", "mood": "Unhurried / mellow jazz", "bpm": 83, "duration": "3:38", "sourceFile": "Cool Vibes.mp3", "isrc": "USUAN1100863" },
+    { "id": "airport-lounge", "title": "Airport Lounge", "mood": "Easy conversation / light lounge", "bpm": 129, "duration": "5:08", "sourceFile": "Airport Lounge.mp3", "isrc": "USUAN1100806" },
+    { "id": "bossa-antigua", "title": "Bossa Antigua", "mood": "Sunny / acoustic bossa", "bpm": 70, "duration": "4:43", "sourceFile": "Bossa Antigua.mp3", "isrc": "USUAN1700069" },
+    { "id": "dream-culture", "title": "Dream Culture", "mood": "Reflective / dreamy piano", "bpm": 70, "duration": "3:34", "sourceFile": "Dream Culture.mp3", "isrc": "USUAN1300046" },
+    { "id": "easy-lemon", "title": "Easy Lemon", "mood": "Friendly / gentle daytime", "bpm": 82, "duration": "2:06", "sourceFile": "Easy Lemon.mp3", "isrc": "USUAN1200076" },
+    { "id": "lobby-time", "title": "Lobby Time", "mood": "Light / relaxed lounge", "bpm": 128, "duration": "3:13", "sourceFile": "Lobby Time.mp3", "isrc": "USUAN1600054" },
+    { "id": "george-street-shuffle", "title": "George Street Shuffle", "mood": "Upbeat / light jazz", "bpm": 153, "duration": "4:28", "sourceFile": "George Street Shuffle.mp3", "isrc": "USUAN1300035" },
+    { "id": "local-forecast", "title": "Local Forecast", "mood": "Magazine show / bright groove", "bpm": 93, "duration": "2:45", "sourceFile": "Local Forecast.mp3", "isrc": "USUAN1300010" },
+    { "id": "night-on-the-docks", "title": "Night on the Docks - Sax", "mood": "After hours / thoughtful sax", "bpm": 0, "duration": "2:54", "sourceFile": "Night on the Docks - Sax.mp3", "isrc": "USUAN1100137" }
+  ],
+  "effects": [
+    { "id": "cheer", "title": "Studio applause", "key": "C", "author": "ZyryTSounds", "source": "https://freesound.org/people/ZyryTSounds/sounds/219241/", "download": "https://cdn.freesound.org/previews/219/219241_4082826-hq.mp3", "start": 0, "seconds": 5, "fadeOut": 0.6 },
+    { "id": "horn", "title": "Air horn", "key": "H", "author": "jacksonacademyashmore", "source": "https://freesound.org/people/jacksonacademyashmore/sounds/414208/", "download": "https://cdn.freesound.org/previews/414/414208_6938106-hq.mp3", "start": 0, "seconds": 1.61, "fadeOut": 0.08 },
+    { "id": "rimshot", "title": "Drum sting", "key": "R", "author": "gefscream", "source": "https://freesound.org/people/gefscream/sounds/470195/", "download": "https://cdn.freesound.org/previews/470/470195_9908260-hq.mp3", "start": 0.70, "seconds": 1.8, "fadeOut": 0.12 },
+    { "id": "incoming", "title": "Incoming phone", "key": "", "author": "kyles", "source": "https://freesound.org/people/kyles/sounds/450042/", "download": "https://cdn.freesound.org/previews/450/450042_612689-hq.mp3", "start": 0.16, "seconds": 2.1, "fadeOut": 0.12 },
+    { "id": "connected", "title": "Receiver pickup", "key": "", "author": "kyles", "source": "https://freesound.org/people/kyles/sounds/637750/", "download": "https://cdn.freesound.org/previews/637/637750_612689-hq.mp3", "start": 0.22, "seconds": 0.5, "fadeOut": 0.08 },
+    { "id": "hostHangup", "title": "Receiver down", "key": "", "author": "ThunderQuads", "source": "https://freesound.org/people/ThunderQuads/sounds/467200/", "download": "https://cdn.freesound.org/previews/467/467200_9871357-hq.mp3", "start": 0.17, "seconds": 0.5, "fadeOut": 0.08 },
+    { "id": "callerHangup", "title": "Caller hangs up", "key": "G", "author": "ThunderQuads", "source": "https://freesound.org/people/ThunderQuads/sounds/467200/", "download": "https://cdn.freesound.org/previews/467/467200_9871357-hq.mp3", "start": 0.17, "seconds": 0.5, "fadeOut": 0.08 }
+  ]
+}

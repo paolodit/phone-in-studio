@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Bot, Images, Mic2, PauseCircle, PhoneOff, Volume2, SlidersHorizontal } from "lucide-react";
+import { Bot, Mic2, PauseCircle, PhoneOff, Volume2, SlidersHorizontal } from "lucide-react";
 import type { BroadcastSnapshot } from "@/lib/public-show";
 import type { StudioControlAction } from "@/lib/schemas";
 import type { StudioState } from "@/lib/studio-state";
@@ -14,6 +14,8 @@ import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 import { StudioRecorderPanel } from "@/components/StudioRecorderPanel";
+import { StudioOnAirTools } from "@/components/StudioOnAirTools";
+import { builtInCues, clampAudioVolume, StudioAudioDeck, type BuiltInCueId, type DeckState } from "@/lib/studio-audio";
 import { buildLiveDirectionInstructions, neutralLiveDirection, type LiveDirection } from "@/lib/live-direction";
 
 const text = (value: unknown) => typeof value === "string" ? value : "-";
@@ -24,37 +26,6 @@ const directionLabels = {
   pace: ["Much slower", "Slower", "Baseline", "Faster", "Much faster"],
   answerLength: ["Very brief", "Shorter", "Baseline", "Fuller", "Longest"],
 };
-
-const activeCueContexts = new Set<AudioContext>();
-
-function playSynthCue(effect: "incoming" | "connected" | "hostHangup" | "callerHangup" | "cheer" | "horn" | "rimshot") {
-  const patterns = {
-    incoming: { notes: [660, 880], type: "sine" as OscillatorType, duration: 0.11 },
-    connected: { notes: [740, 988], type: "sine" as OscillatorType, duration: 0.1 },
-    hostHangup: { notes: [520, 340], type: "square" as OscillatorType, duration: 0.13 },
-    callerHangup: { notes: [440, 300], type: "sine" as OscillatorType, duration: 0.15 },
-    cheer: { notes: [392, 494, 587, 698], type: "triangle" as OscillatorType, duration: 0.09 },
-    horn: { notes: [233, 277], type: "sawtooth" as OscillatorType, duration: 0.22 },
-    rimshot: { notes: [180, 880], type: "square" as OscillatorType, duration: 0.07 },
-  }[effect];
-  const context = new AudioContext();
-  activeCueContexts.add(context);
-  const start = context.currentTime;
-  patterns.notes.forEach((frequency, index) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const time = start + index * (patterns.duration + 0.025);
-    oscillator.type = patterns.type;
-    oscillator.frequency.setValueAtTime(frequency, time);
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(effect === "horn" ? 0.07 : 0.12, time + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + patterns.duration);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(time);
-    oscillator.stop(time + patterns.duration + 0.01);
-  });
-  window.setTimeout(() => { activeCueContexts.delete(context); if (context.state !== "closed") void context.close(); }, patterns.notes.length * (patterns.duration + 0.025) * 1_000 + 250);
-}
 
 const eventTime = (timestamp: string) => {
   const date = new Date(timestamp);
@@ -90,7 +61,14 @@ export function StudioClient({
   const [liveDirection, setLiveDirection] = useState<LiveDirection>({ ...neutralLiveDirection });
   const [transcript, setTranscript] = useState<{ speaker: "HOST" | "CALLER"; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
-  const [mediaPane, setMediaPane] = useState<"visuals" | "soundboard">("visuals");
+  const [musicState, setMusicState] = useState<DeckState>({ status: "idle" });
+  const [cueState, setCueState] = useState<DeckState>({ status: "idle" });
+  const [musicVolume, setMusicVolume] = useState(0.18);
+  const [cueVolume, setCueVolume] = useState(0.7);
+  const [musicLoop, setMusicLoop] = useState(true);
+  const [audioPreferencesReady, setAudioPreferencesReady] = useState(false);
+  const musicDeckRef = useRef<StudioAudioDeck | null>(null);
+  const cueDeckRef = useRef<StudioAudioDeck | null>(null);
   const [aiHostPaused, setAiHostPaused] = useState(false);
   const [aiHostBusy, setAiHostBusy] = useState(false);
   const [autoRunActive, setAutoRunActive] = useState(false);
@@ -107,6 +85,30 @@ export function StudioClient({
   const hostTurnCountRef = useRef(0);
   const directionAppliedRef = useRef(false);
   const soundRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  useEffect(() => {
+    const music = new StudioAudioDeck(setMusicState, 0.18);
+    const cues = new StudioAudioDeck(setCueState, 0.7);
+    musicDeckRef.current = music; cueDeckRef.current = cues;
+    setMusicState({ status: "idle" }); setCueState({ status: "idle" });
+    try {
+      const saved = JSON.parse(localStorage.getItem(`phone-in:studio-audio:${showId}`) ?? "null");
+      if (saved) {
+        if (typeof saved.musicVolume === "number") setMusicVolume(clampAudioVolume(saved.musicVolume));
+        if (typeof saved.cueVolume === "number") setCueVolume(clampAudioVolume(saved.cueVolume));
+        if (typeof saved.musicLoop === "boolean") setMusicLoop(saved.musicLoop);
+      }
+    } catch { /* Playback remains usable without saved preferences. */ }
+    setAudioPreferencesReady(true); cues.preload(builtInCues);
+    return () => { music.dispose(); cues.dispose(); };
+  }, [showId]);
+  useEffect(() => {
+    musicDeckRef.current?.setVolume(musicVolume); musicDeckRef.current?.setLoop(musicLoop); cueDeckRef.current?.setVolume(cueVolume);
+    for (const effect of studioState.soundEffects) { const audio = soundRef.current.get(effect.id); if (audio) audio.volume = clampAudioVolume(effect.volume * cueVolume); }
+    if (audioPreferencesReady) { try { localStorage.setItem(`phone-in:studio-audio:${showId}`, JSON.stringify({ musicVolume, cueVolume, musicLoop })); } catch { /* Optional preference storage. */ } }
+  }, [musicVolume, cueVolume, musicLoop, audioPreferencesReady, showId, studioState.soundEffects]);
+  const playCue = useCallback((id: BuiltInCueId) => { const cue = builtInCues.find((item) => item.id === id); if (cue) void cueDeckRef.current?.play(cue); }, []);
+  const stopEffects = useCallback(() => { cueDeckRef.current?.stop(); soundRef.current.forEach((audio) => { audio.pause(); audio.currentTime = 0; }); }, []);
+  useEffect(() => { if (snapshot.broadcastState === "SHOW_ENDED") { musicDeckRef.current?.stop(); stopEffects(); } }, [snapshot.broadcastState, stopEffects]);
   const lastAudioLevelSent = useRef(0);
   const lastMeterPaint = useRef(0);
   const audioReportInFlight = useRef(false);
@@ -156,8 +158,6 @@ export function StudioClient({
     connectionAbortRef.current?.abort();
     hostTurnAbortRef.current?.abort();
     soundRef.current.forEach((audio) => audio.pause());
-    activeCueContexts.forEach((context) => { if (context.state !== "closed") void context.close(); });
-    activeCueContexts.clear();
     window.speechSynthesis?.cancel();
     hostAudioRef.current?.pause();
     if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
@@ -345,8 +345,8 @@ export function StudioClient({
         setAutoRunActive(false);
         hostAudioRef.current?.pause();
         soundRef.current.forEach((audio) => { audio.pause(); audio.currentTime = 0; });
-        activeCueContexts.forEach((context) => { if (context.state !== "closed") void context.close(); });
-        activeCueContexts.clear();
+        cueDeckRef.current?.stop();
+        musicDeckRef.current?.stop();
         window.speechSynthesis?.cancel();
         if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
       }
@@ -382,8 +382,8 @@ export function StudioClient({
         await sessionRef.current?.muteOutput(false);
         setMuted(false);
       }
-      if (action === "END_CALL") playSynthCue("hostHangup");
-      if (action === "CALLER_HANGS_UP") playSynthCue("callerHangup");
+      if (action === "END_CALL") playCue("hostHangup");
+      if (action === "CALLER_HANGS_UP") playCue("callerHangup");
       if (["END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action) && studioState.aiHost?.visualPolicy === "AUTO_SHOW") {
         await triggerVisual(null).catch(() => undefined);
       }
@@ -393,13 +393,13 @@ export function StudioClient({
       if (["END_CALL", "CALLER_HANGS_UP"].includes(action)) {
         try {
           await postControl("CUE_NEXT");
-          playSynthCue("incoming");
+          playCue("incoming");
           setMessage(`${action === "CALLER_HANGS_UP" ? "Caller hung up" : "Call ended"}. The next caller is now coming up on the display — press Answer when you are ready to put them on air.`);
         } catch {
           setMessage("Call ended. There are no more callers in the queue.");
         }
       } else if (action === "ANSWER_CALL") {
-        playSynthCue("connected");
+        playCue("connected");
         try {
           await connectRealtime(true);
         } catch (error) {
@@ -422,7 +422,7 @@ export function StudioClient({
     } finally {
       setBusy(false);
     }
-  }, [connectRealtime, endBrowserAudio, playMockCaller, postControl, studioState.aiHost?.visualPolicy, triggerVisual]);
+  }, [connectRealtime, endBrowserAudio, playMockCaller, playCue, postControl, studioState.aiHost?.visualPolicy, triggerVisual]);
 
   const connectAiCaller = useCallback(async () => {
     setBusy(true);
@@ -589,9 +589,10 @@ export function StudioClient({
       soundRef.current.set(effect.id, audio);
     }
     audio.loop = effect.loop;
-    audio.volume = effect.volume;
+    audio.volume = clampAudioVolume(effect.volume * cueVolume);
     audio.currentTime = 0;
-    await audio.play();
+    try { await audio.play(); }
+    catch { setMessage(`Could not play ${effect.label}. Check its URL and browser sound permissions.`); return; }
     void fetch(`/api/shows/${showId}/sound`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -620,7 +621,7 @@ export function StudioClient({
       }[key];
       if (builtIn) {
         event.preventDefault();
-        playSynthCue(builtIn.cue);
+        playCue(builtIn.cue);
         setMessage(builtIn.message);
         return;
       }
@@ -632,7 +633,7 @@ export function StudioClient({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [playSound, studioState.soundEffects]);
+  }, [playSound, playCue, studioState.soundEffects]);
 
   const broadcastState = snapshot.broadcastState;
   const showIsLive = studioState.showStatus === "LIVE";
@@ -844,12 +845,12 @@ export function StudioClient({
     <aside className="space-y-5">
       <div className="panel panel-pad"><div className="flex items-center justify-between gap-3"><p className="eyebrow">Up next</p><Link className="text-xs font-bold text-cyan-200" href={`/callers?show=${showId}`}>+ Add callers</Link></div><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
       <StudioRecorderPanel showId={showId} title={snapshot.title} callerName={caller?.name} inputDeviceId={inputDeviceId || undefined} transcript={transcript} stopSignal={recordingStopSignal} showEnded={broadcastState === "SHOW_ENDED"} />
-      <div className="panel panel-pad">
-        <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals"><Images className="h-3.5 w-3.5" /> Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard"><AudioLines className="h-3.5 w-3.5" /> Sounds</button></div></div>
-        {mediaPane === "visuals"
-          ? <><p className="mt-2 text-xs text-slate-400">Choose an image to send it to the broadcast display. Newly added caller visuals are available immediately.</p><button type="button" onClick={() => void showVisual(null)} className="mt-2 text-xs font-bold text-cyan-200">Clear on-air visual</button><div className="mt-3 grid max-h-80 grid-cols-2 gap-2 overflow-y-auto pr-1">{visualAssets.length ? visualAssets.map((asset, index) => <button type="button" key={asset.id} onClick={() => void showVisual(asset.id)} aria-pressed={snapshot.caller?.visual?.url === asset.url} className={`overflow-hidden rounded-lg border bg-slate-950 text-left text-xs text-slate-200 hover:border-cyan-400 ${snapshot.caller?.visual?.url === asset.url ? "border-cyan-300 ring-1 ring-cyan-300" : "border-slate-700"}`}><img className="h-16 w-full object-cover opacity-70" src={asset.url} alt="" /><span className="block p-2"><b className="text-cyan-300">{asset.manualHotkey ?? index + 1}</b><br />{asset.label}</span></button>) : <p className="text-sm text-slate-400">No caller visuals selected.</p>}</div></>
-          : <><p className="mt-2 text-xs text-slate-400">Incoming, connection and host hang-up tones run automatically. These are optional host triggers.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { playSynthCue("cheer"); setMessage("Played optional cheer cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Cheer [C]</button><button type="button" onClick={() => { playSynthCue("horn"); setMessage("Played optional horn cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Horn [H]</button><button type="button" onClick={() => { playSynthCue("rimshot"); setMessage("Played optional rimshot cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Rimshot [R]</button><button type="button" onClick={() => { playSynthCue("callerHangup"); setMessage("Played caller hang-up cue."); }} className="rounded-lg bg-slate-800 p-2 text-left text-xs font-bold text-slate-100 hover:bg-slate-700">Caller hangs up [G]</button>{studioState.soundEffects.map((effect) => <div key={effect.id} className="rounded-lg border border-slate-700 bg-slate-950 p-2"><button type="button" onClick={() => void playSound(effect)} className="w-full text-left text-xs font-bold text-slate-100 hover:text-cyan-200">Play {effect.label}{effect.hotkey ? ` [${effect.hotkey}]` : ""}</button><button type="button" onClick={() => stopSound(effect.id)} className="mt-2 text-[10px] font-bold uppercase text-slate-500">Stop</button></div>)}</div><p className="mt-3 text-xs text-slate-500">Add URL-based custom cues and a one-character hotkey from the show page.</p></>}
-      </div>
+      <StudioOnAirTools visuals={visualAssets} activeVisualUrl={snapshot.caller?.visual?.url} onVisual={(id) => void showVisual(id)}
+        sounds={studioState.soundEffects} onSound={(effect) => void playSound(effect)} onStopSound={stopSound}
+        onCue={playCue} onStopEffects={stopEffects} cueState={cueState} cueVolume={cueVolume} onCueVolume={setCueVolume}
+        musicState={musicState} musicVolume={musicVolume} musicLoop={musicLoop}
+        onMusic={(track) => void musicDeckRef.current?.play(track)} onStopMusic={() => musicDeckRef.current?.stop()}
+        onMusicVolume={setMusicVolume} onMusicLoop={setMusicLoop} />
       <div className="panel panel-pad"><p className="eyebrow">Live transcript</p><div className="mt-3 max-h-48 space-y-2 overflow-auto text-xs">{transcript.length ? transcript.map((entry, index) => <p key={`${entry.speaker}-${index}`}><b className="text-cyan-300">{entry.speaker === "HOST" ? "HOST" : "CALLER"}</b> <span className="text-slate-200">{entry.text}</span></p>) : <p className="text-slate-400">Transcript events will appear and persist here during a Realtime call.</p>}</div></div>
       <details className="panel panel-pad"><summary className="eyebrow cursor-pointer">Event log</summary><div className="mt-3 max-h-40 space-y-2 overflow-auto text-xs">{studioState.events.map((event, index) => <div className="flex justify-between gap-3 border-b border-slate-800 pb-2" key={`${event.timestamp}-${index}`}><span className="text-slate-200">{event.type.replaceAll("_", " ")}</span><time className="shrink-0 text-slate-500">{eventTime(event.timestamp)}</time></div>)}</div></details>
     </aside>
