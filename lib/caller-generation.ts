@@ -102,6 +102,7 @@ export async function requestStructuredOutput<T>(options: {
   try {
     response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: AbortSignal.timeout(180_000),
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: process.env.OPENAI_CALLER_GENERATION_MODEL ?? DEFAULT_CALLER_GENERATION_MODEL,

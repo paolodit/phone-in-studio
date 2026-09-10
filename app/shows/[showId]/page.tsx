@@ -61,6 +61,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       <div className="flex flex-wrap gap-2">
         <Link href={`/studio?show=${show.id}`} className="button-primary"><Mic2 className="h-4 w-4" /> Open Studio</Link>
         <Link href={`/shows/${show.id}/preview`} className="button-secondary"><Monitor className="h-4 w-4" /> Test layouts</Link>
+        <Link href={`/shows/${show.id}/recordings`} className="button-secondary">Recordings & moments</Link>
         <Link href={broadcastUrl} target="_blank" className="button-secondary"><ExternalLink className="h-4 w-4" /> Broadcast output</Link>
       </div>
     </div>

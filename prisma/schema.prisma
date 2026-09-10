@@ -307,3 +307,15 @@ model ShowEvent {
 
   @@index([showId, timestamp])
 }
+
+// Private editorial drafts: no Caller or Show is created before approval.
+model ShowPlan {
+  id             String   @id @default(cuid())
+  brief          String
+  durationMinutes Int
+  content        Json
+  revision       Int      @default(0)
+  acceptedShowId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

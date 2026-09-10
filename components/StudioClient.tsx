@@ -13,6 +13,7 @@ import { FishAudioVoiceProvider } from "@/lib/voice/fish-audio-provider";
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
+import { StudioRecorderPanel } from "@/components/StudioRecorderPanel";
 import { buildLiveDirectionInstructions, neutralLiveDirection, type LiveDirection } from "@/lib/live-direction";
 
 const text = (value: unknown) => typeof value === "string" ? value : "-";
@@ -83,6 +84,7 @@ export function StudioClient({
   const [replyLatency, setReplyLatency] = useState<number | null>(null);
   const [volume, setVolume] = useState(0.9);
   const [muted, setMuted] = useState(false);
+  const [recordingStopSignal, setRecordingStopSignal] = useState(0);
   const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
   const [sessionConnected, setSessionConnected] = useState(false);
   const [liveDirection, setLiveDirection] = useState<LiveDirection>({ ...neutralLiveDirection });
@@ -338,6 +340,7 @@ export function StudioClient({
     setBusy(true);
     try {
       if (["EMERGENCY_STOP", "END_SHOW"].includes(action)) {
+        setRecordingStopSignal((value) => value + 1);
         autoRunRef.current = false;
         setAutoRunActive(false);
         hostAudioRef.current?.pause();
@@ -840,6 +843,7 @@ export function StudioClient({
 
     <aside className="space-y-5">
       <div className="panel panel-pad"><div className="flex items-center justify-between gap-3"><p className="eyebrow">Up next</p><Link className="text-xs font-bold text-cyan-200" href={`/callers?show=${showId}`}>+ Add callers</Link></div><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
+      <StudioRecorderPanel showId={showId} title={snapshot.title} callerName={caller?.name} inputDeviceId={inputDeviceId || undefined} transcript={transcript} stopSignal={recordingStopSignal} showEnded={broadcastState === "SHOW_ENDED"} />
       <div className="panel panel-pad">
         <div className="flex items-center justify-between gap-2"><p className="eyebrow">On-air tools</p><div className="flex rounded-lg bg-slate-950 p-1 text-xs font-bold"><button type="button" onClick={() => setMediaPane("visuals")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "visuals" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Prepared visuals"><Images className="h-3.5 w-3.5" /> Visuals</button><button type="button" onClick={() => setMediaPane("soundboard")} className={`flex items-center gap-1.5 rounded-md px-2 py-1 ${mediaPane === "soundboard" ? "bg-cyan-400 text-slate-950" : "text-slate-300"}`} title="Soundboard"><AudioLines className="h-3.5 w-3.5" /> Sounds</button></div></div>
         {mediaPane === "visuals"

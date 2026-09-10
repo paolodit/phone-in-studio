@@ -9,6 +9,8 @@ Create callers, arrange a live running order, hold private voice soundchecks and
 privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or another broadcast workflow.
 </p>
 
+<p>Start with a show idea. Shape a small line-up. Record the conversation and mark the moments worth keeping.</p>
+
 <p>
   <img alt="Next.js 15" src="https://img.shields.io/badge/Next.js-15-111827?logo=nextdotjs" />
   <img alt="React 19" src="https://img.shields.io/badge/React-19-0f172a?logo=react" />
@@ -40,11 +42,13 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
 
 ```mermaid
 flowchart LR
-    A["Create caller"] --> B["Private soundcheck"]
+    A["Show brief"] --> B["Review line-up"]
     B --> C["Approve and queue"]
+    F["Caller Workshop"] --> C
     C --> D["Host Studio"]
     D --> E["Broadcast display"]
-    F["Live producer"] --> C
+    D --> G["Record and mark moments"]
+    G --> H["Listen and download"]
 ```
 
 | Caller Workshop | Show workspace | Host Studio | Broadcast output |
@@ -56,6 +60,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 ## What works today
 
 - Multiple independent show workspaces.
+- **Make tonight’s show:** one brief becomes four or six varied caller cards with a suggested running order. Keep, tweak, swap and reorder privately, then explicitly approve into a new off-air show.
 - A deliberately shallow AI caller builder: one seed, optional call-type/tone preferences, six varied directions and one ready-to-use card.
 - Quick manual caller creation with only the on-air essentials required; identity, voice, behavioural notes and graphics are collapsible extras.
 - Searchable caller management with ready/draft/history status, topic filters, portraits, direct private soundchecks and one-click addition to a selected show.
@@ -67,6 +72,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Optional ElevenLabs Conversational AI and Fish Audio turn-based comparison routes with per-caller voice IDs.
 - Explicit voice-presentation casting for generated and manually edited callers, with compatible OpenAI and Gemini voice selection.
 - Three temporary Host Studio direction controls for caller energy, pace and answer length.
+- Local audio recording of the Studio tab plus an optional microphone, with pause/resume, moment markers, playback and downloads. No recording upload or new cloud service.
 - Drag-and-drop running orders, caller reactivation and additions during a live show.
 - Automatic incoming, connected and host hang-up tones.
 - Optional cheer, horn, rimshot and custom soundboard cues.
@@ -118,6 +124,16 @@ npm run dev
 
 This starts the detached local PostgreSQL runtime and Next.js together. Leave `DATABASE_URL` unset in `.env.local` for the local workflow; the development script supplies the connection.
 
+After pulling an update that adds database migrations, stop the app and run:
+
+```powershell
+npm run db:generate
+npm run db:local:migrate
+npm run dev
+```
+
+`db:local:migrate` applies schema updates without resetting or reseeding existing shows and callers.
+
 To add or refresh the varied six-caller demo pack without resetting your own shows or callers:
 
 ```powershell
@@ -155,6 +171,18 @@ All provider credentials remain server-side. Never commit `.env.local`.
 Restart `npm run dev` after changing environment variables.
 
 ## Using the studio
+
+### The quickest route: make tonight’s show
+
+Open **Shows → Make tonight’s show**. Give it one creative brief—something like “a late-night show about starting over, with warmth, awkwardness and one strange caller”—then choose the length and four or six callers.
+
+The planner proposes a title, editorial flow and complete caller cards. Each card explains why this person is calling now, what they want, their voice and a possible visual. Keep or remove cards, **Tweak** the essentials, **Swap** one for a different idea, and move callers earlier or later. Timings are editorial estimates, not automatic call cut-offs.
+
+Plans are saved privately in the database and can be reopened under **Pick up a saved plan**. They do not populate your caller library, change an existing show or require the optional Caller Factory. Generation and swaps use your configured OpenAI generation model and may take a minute or two; review the output before approval.
+
+**Approve selected & create show** creates approved callers and queues only the kept cards in a new **Ready**, off-air show. Nothing starts broadcasting. You can then use the existing caller editor, private soundchecks and media tools. Visual ideas are suggestions only: this flow does not fetch stock images or generate portraits automatically.
+
+Prefer to build from individual callers? The manual workflow below remains available.
 
 ### 1. Build a caller
 
@@ -203,6 +231,21 @@ There is no redundant second step to fetch the next caller after ending a call. 
 The **live control strip stays visible while you scroll**. Answer/resume follows the state of the line; **Take the floor** (Space), mute, hold and end-call controls appear when relevant. Microphone/caller meters and caller volume stay within reach during a connected call. **Stop all** (Escape) stops local caller audio, pending AI-host speech and sound cues. Holding a caller mutes both their output and their access to the host microphone.
 
 The show workspace opens on the running order, with a searchable **Add a caller** lane alongside it. Finished callers are collapsed, not deleted. Drag queued callers to reorder them, or focus a row and use **Alt + Up/Down**. Show options, optional checks and custom sound setup stay out of the main preparation path.
+
+### 5. Record and revisit the good moments
+
+In Studio, open **Record your show** and choose **Start recording**. In Chrome or Edge, select **this Studio browser tab**, enable **Share tab audio**, and allow the microphone if you want the human host in the recording. Use headphones and check the tab-audio and microphone meters before you begin. If your in-app browser does not offer tab-audio sharing, open the local Studio in Chrome or Edge.
+
+- The tab supplies AI voices and sound cues across all providers. The optional microphone supplies the human host. For an AI-host-only show, you can turn the microphone off.
+- **Mark moment** adds a timestamp, optionally named, without interrupting the call. **Pause recording** excludes private conversation from the capture and its timeline. Holding a caller does **not** pause recording.
+- **Stop & save**, ending the show, an emergency stop or a disconnected capture source finishes the recording. Captures stop at two hours; start another to continue.
+- Open **Recordings** in Studio or **Recordings & moments** from the show workspace. Listen, jump to a marker, rename moments, download the audio, and export transcript text or JSON notes.
+- If a tab closed unexpectedly, use **Recover unfinished capture**. It refuses recovery while a Studio tab still owns that recording. Saved chunks may be incomplete; check playback.
+
+> [!IMPORTANT]
+> This first version records **audio, not video**, to this browser’s IndexedDB storage. Nothing is uploaded or synced between browsers. Clearing site data or changing site address/browser can make recordings unavailable. Download a copy after each show. Disk/storage failures and abrupt browser closure can lose the final seconds.
+
+Downloads use WebM/Opus or M4A, depending on browser support. Markers are editing notes, not automatically rendered clips. Transcripts contain only live provider events received while recording; timestamps mark receipt, not exact word alignment, and no new transcription is performed. Other sounds from the selected tab are captured too—avoid unrelated audio while recording.
 
 ## Simple two-producer operation
 
@@ -347,10 +390,12 @@ For an internet-facing deployment, still add TLS, managed secrets, database back
 | `npm run dev` | Start the local database if required and run Next.js development mode. |
 | `npm run db:generate` | Regenerate the Prisma client. |
 | `npm run db:local:init` | Apply migrations and reset local fixtures. |
+| `npm run db:local:migrate` | Apply local schema updates without resetting shows or callers. |
 | `npm run db:local:stop` | Stop the detached local database runtime. |
 | `npm run lint` | Run the TypeScript no-emit check. |
 | `npm test` | Run the Vitest suite. |
 | `npm run verify:local` | Verify an isolated show-state, persistence and privacy flow. |
+| `npm run verify:planner` | Verify private planning and idempotent off-air approval using temporary, self-cleaning database fixtures. |
 | `npm run verify:realtime` | Verify an OpenAI temporary session credential without sending audio. |
 | `npm run build` | Create a production build; stop the development server first. |
 
@@ -423,6 +468,9 @@ public/               Bundled caller and interface assets
 
 These are the immediate engineering priorities. The broader product directions—better phone-ins, interview practice, personal breakfast television and turning feeds into programmes—are described in the **[roadmap and vision](./ROADMAP.md)**.
 
+- Test the complete brief → line-up → live show → local recording loop with a real headset and short show.
+- Build clip export from marked moments, with caption editing and portrait/landscape presentation; the current recorder exports audio, not video.
+- Add reusable show identities and more purposeful editorial pacing, without making preparation a long form.
 - Real-room comparison and tuning across OpenAI 1.5, Gemini Live, ElevenLabs and the turn-based Fish Audio route.
 - Real-show testing and recovery tuning for guarded AI Host auto-run.
 - Scheduling, cost caps and semantic duplicate detection for recurring Caller Factory batches.
