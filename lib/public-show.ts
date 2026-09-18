@@ -1,10 +1,12 @@
 import { callerSnapshotSchema } from "@/lib/schemas";
+import type { VisualPlaylist } from "@/lib/visual-autoplay";
 
 export type BroadcastSnapshot = {
   showId: string;
   title: string;
   broadcastState: string;
   updatedAt: string;
+  visualPlaylist?: VisualPlaylist;
   caller: null | {
     name: string;
     location: string;

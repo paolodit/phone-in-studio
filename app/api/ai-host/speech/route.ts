@@ -2,17 +2,21 @@ import { NextResponse } from "next/server";
 import { isAdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { aiHostSpeechSchema } from "@/lib/schemas";
+import { moduleEnabled } from "@/lib/modules";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!(await isAdminSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
+    if (!(await moduleEnabled("AI_HOST"))) return NextResponse.json({ error: "Enable AI Host in Optional modules first." }, { status: 403 });
     const input = aiHostSpeechSchema.parse(await request.json());
     const [profile, apiKey] = await Promise.all([prisma.hostProfile.findUniqueOrThrow({ where: { id: input.profileId } }), Promise.resolve(process.env.OPENAI_API_KEY)]);
     if (!apiKey) return NextResponse.json({ error: "AI Host speech is not configured. Add OPENAI_API_KEY and restart the server." }, { status: 503 });
+    if (!profile.active) return NextResponse.json({ error: "Choose an active presenter profile." }, { status: 409 });
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]),
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model: process.env.OPENAI_HOST_TTS_MODEL ?? "tts-1", voice: profile.voiceId, input: input.text, response_format: "mp3", speed: 1 }),
     });

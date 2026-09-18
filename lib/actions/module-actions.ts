@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hostProfileSchema, optionalModuleKeySchema, showModuleSetupSchema } from "@/lib/schemas";
+import { getBroadcastSnapshot } from "@/lib/show-service";
+import { publishShowUpdate } from "@/lib/events";
 
 export async function setOptionalModuleAction(keyValue: string, formData: FormData) {
   await requireAdmin();
@@ -48,9 +50,10 @@ export async function updateShowModulesAction(showId: string, formData: FormData
   const input = showModuleSetupSchema.parse(Object.fromEntries(formData.entries()));
   const globalRows = await prisma.optionalModuleSetting.findMany({ where: { enabled: true } });
   const globallyEnabled = new Set(globalRows.map((row) => row.key));
-  const aiHostEnabled = globallyEnabled.has("AI_HOST") && input.aiHostEnabled;
+  const aiHostEnabled = globallyEnabled.has("AI_HOST") && input.hostMode !== "HUMAN";
   const callerFactoryEnabled = globallyEnabled.has("CALLER_FACTORY") && input.callerFactoryEnabled;
   if (aiHostEnabled && input.hostMode !== "HUMAN" && !input.hostProfileId) throw new Error("Choose an AI host profile before enabling an AI host mode.");
+  if (aiHostEnabled && !(await prisma.hostProfile.findFirst({ where: { id: input.hostProfileId, active: true } }))) throw new Error("Choose an active presenter profile.");
   const hostConfig = {
     maxTurnsPerCaller: input.autoMaxTurns,
     betweenCallsSeconds: input.autoBetweenCallsSeconds,
@@ -64,4 +67,6 @@ export async function updateShowModulesAction(showId: string, formData: FormData
   ]);
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/studio");
+  publishShowUpdate(showId, await getBroadcastSnapshot(showId));
+  redirect(`/studio?show=${showId}`);
 }

@@ -44,6 +44,7 @@ export function callerStructuredData(input: CallerFormInput) {
     performance: {
       voiceId: input.voiceId,
       voicePresentation: input.voicePresentation ?? "any",
+      openaiLiveVoiceId: input.openaiLiveVoiceId || undefined,
       elevenLabsVoiceId: input.elevenLabsVoiceId,
       fishAudioVoiceId: input.fishAudioVoiceId,
       voiceInstructions: speakingStyle,

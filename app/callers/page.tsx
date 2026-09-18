@@ -47,7 +47,7 @@ export default async function CallersPage({ searchParams }: { searchParams: Prom
 
     <p className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400"><span><b className="text-white">{callers.length}</b> callers</span><span><b className="text-emerald-200">{approvedCount}</b> ready</span><span><b className="text-cyan-200">{appearedCount}</b> appeared</span></p>
 
-    {selectedShow ? <CallerShowTarget shows={shows} selectedShowId={selectedShow.id} /> : <section className="panel panel-pad mt-4 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">One-click queue</p><p className="mt-1 font-bold text-white">Create a show before adding callers to a running order.</p></div><Link className="button-primary" href="/shows?new=1">Create show</Link></section>}
+    {selectedShow ? <CallerShowTarget shows={shows} selectedShowId={selectedShow.id} /> : <section className="panel panel-pad mt-4 flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">One-click queue</p><p className="mt-1 font-bold text-white">Create a channel before adding callers to a running order.</p></div><Link className="button-primary" href="/shows?new=1">Create channel</Link></section>}
 
     <form className="panel panel-pad mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_10rem_11rem_11rem_minmax(10rem,1fr)_auto]" action="/callers">
       {selectedShow && <input type="hidden" name="show" value={selectedShow.id} />}

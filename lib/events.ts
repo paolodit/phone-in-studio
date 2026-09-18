@@ -16,6 +16,12 @@ export function publishShowUpdate(showId: string, snapshot: BroadcastSnapshot) {
   bus.emit(`show:${showId}`, snapshot);
 }
 
+export function publishShowDeleted(showId: string) { bus.emit(`show-deleted:${showId}`); }
+export function subscribeToShowDeleted(showId: string, listener: () => void) {
+  bus.on(`show-deleted:${showId}`, listener);
+  return () => { bus.off(`show-deleted:${showId}`, listener); };
+}
+
 export function subscribeToShow(showId: string, listener: (snapshot: BroadcastSnapshot) => void) {
   const event = `show:${showId}`;
   bus.on(event, listener);

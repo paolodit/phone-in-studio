@@ -5,6 +5,7 @@ import { Image as ImageIcon, Pencil, Save, SlidersHorizontal, UserRound, Volume2
 import { CallerAvatarPicker } from "@/components/CallerAvatarPicker";
 import { CallerImageGenerator } from "@/components/CallerImageGenerator";
 import { normalizeOpenAIVoice, normalizeVoicePresentation, OPENAI_VOICE_OPTIONS } from "@/lib/voices";
+import { OPENAI_LIVE_VOICE_OPTIONS, resolveOpenAILiveVoice } from "@/lib/openai-live-voices";
 
 type CallerValues = {
   firstName?: string; surnameInitial?: string | null; age?: number | null; location?: string; occupation?: string | null; relationshipStatus?: string | null;
@@ -33,6 +34,7 @@ export function CallerEditor({ action, caller, submitLabel }: {
   const selectedVoicePresentation = normalizeVoicePresentation(performance.voicePresentation);
   const elevenLabsVoiceId = string(performance.elevenLabsVoiceId);
   const fishAudioVoiceId = string(performance.fishAudioVoiceId);
+  const liveVoiceId = string(performance.openaiLiveVoiceId);
   const imagePrompt = `${caller?.firstName ?? "A fictional adult caller"}, ${caller?.location ?? "a local radio studio"}. ${caller?.issueHeadline ?? "A distinctive everyday phone-in topic"}`;
   const tags = Array.isArray(generation.topicTags) ? generation.topicTags.filter((tag): tag is string => typeof tag === "string") : [];
 
@@ -76,6 +78,7 @@ export function CallerEditor({ action, caller, submitLabel }: {
       <div className="mt-4 grid gap-4 border-t border-slate-700/70 pt-4 md:grid-cols-2">
         <label><span className="label">Voice presentation</span><select className="field" name="voicePresentation" defaultValue={selectedVoicePresentation}><option value="any">Any / keep selected voice</option><option value="feminine">Feminine</option><option value="masculine">Masculine</option><option value="neutral">Neutral</option></select></label>
         <label><span className="label">Selected voice</span><select className="field" name="voiceId" defaultValue={selectedVoice}>{OPENAI_VOICE_OPTIONS.map((voice) => <option key={voice.id} value={voice.id}>{voice.label} — {voice.description}</option>)}</select></label>
+        <label className="md:col-span-2"><span className="label">GPT-Live voice</span><select className="field" name="openaiLiveVoiceId" defaultValue={liveVoiceId}><option value="">Match selected voice automatically</option>{OPENAI_LIVE_VOICE_OPTIONS.map((voice) => <option key={voice.id} value={voice.id}>{voice.label} · {voice.presentation} · {voice.description}</option>)}</select><span className="mt-1 block text-xs text-slate-500">Only affects GPT-Live-1. The voice presentation preference above still applies; choose Any to keep an explicit cast regardless of presentation. Current match: {resolveOpenAILiveVoice(performance)}. Audition alternatives in Test voice privately. Regional influence is not a guaranteed accent.</span></label>
         <label><span className="label">Delivery pace</span><select className="field" name="pacing" defaultValue={string(performance.pacing, "Conversational")}><option>Measured</option><option>Conversational</option><option>Brisk</option><option>Animated</option></select></label>
         <label><span className="label">ElevenLabs voice ID</span><input className="field" name="elevenLabsVoiceId" defaultValue={elevenLabsVoiceId} placeholder="Optional; otherwise uses the Agent default" /></label>
         <label className="md:col-span-2"><span className="label">Fish Audio voice model ID</span><input className="field" name="fishAudioVoiceId" defaultValue={fishAudioVoiceId} placeholder="Optional; otherwise uses FISH_AUDIO_VOICE_ID or Fish's default voice" /><span className="mt-1 block text-xs text-slate-500">Copy the model ID from a Fish Audio voice page. This only affects the optional Fish route.</span></label>

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Check, Copy, LoaderCircle, Play, Square, Volume2 } from "lucide-react";
 import { musicCredits, musicTracks, type DeckState } from "@/lib/studio-audio";
 
-export function BackgroundMusicPanel({ state, volume, loop, onPlay, onStop, onVolume, onLoop }: {
+export function BackgroundMusicPanel({ state, volume, loop, enabled, onEnabled, onPlay, onStop, onVolume, onLoop }: {
   state: DeckState; volume: number; loop: boolean;
+  enabled: boolean; onEnabled: (value: boolean) => void;
   onPlay: (track: typeof musicTracks[number]) => void; onStop: () => void;
   onVolume: (value: number) => void; onLoop: (value: boolean) => void;
 }) {
@@ -13,7 +14,9 @@ export function BackgroundMusicPanel({ state, volume, loop, onPlay, onStop, onVo
   const [showCredits, setShowCredits] = useState(false);
   const active = state.status === "playing" || state.status === "loading";
   return <div className="mt-4 space-y-4">
-    <p className="text-xs leading-5 text-slate-400">Ten vocal-free beds for conversation, intros and breaks. Choose one to play; nothing starts automatically.</p>
+    <p className="text-xs leading-5 text-slate-400">Ten vocal-free beds for conversation, intros and breaks. Play any track below, or start your selected track when you Start/Answer the show.</p>
+    <label className="flex items-center gap-2 text-sm font-bold text-cyan-100"><input type="checkbox" checked={enabled} onChange={(event) => onEnabled(event.target.checked)} />Background music on</label>
+    <p className="text-[11px] leading-5 text-slate-400">{enabled ? "Ready for your next Start/Answer action. Browser sound permission may be required. Stop turns it off, including on your next visit." : "Off. Play a track or enable it for your next Start/Answer action."} These music preferences are saved for this channel in this browser.</p>
     <div className="rounded-xl border border-slate-700/70 bg-slate-950/70 p-3">
       <div className="flex items-center justify-between gap-3"><label htmlFor="music-volume" className="flex items-center gap-2 text-xs font-semibold text-slate-200"><Volume2 className="h-3.5 w-3.5" />Music volume <span className="font-mono text-cyan-200">{Math.round(volume * 100)}%</span></label><button type="button" disabled={!active} onClick={onStop} className="flex items-center gap-1.5 rounded-lg bg-rose-950/50 px-3 py-2 text-xs font-bold text-rose-100 disabled:opacity-40"><Square className="h-3 w-3" />Stop</button></div>
       <input id="music-volume" aria-label="Background music volume" className="mt-3 w-full accent-cyan-300" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => onVolume(Number(event.target.value))} />

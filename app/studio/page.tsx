@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBroadcastSnapshot } from "@/lib/show-service";
@@ -12,7 +13,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   const { show: requestedShow } = await searchParams;
   const shows = await prisma.show.findMany({ orderBy: { updatedAt: "desc" }, select: { id: true, title: true, status: true } });
   const showId = requestedShow && shows.some((show) => show.id === requestedShow) ? requestedShow : shows[0]?.id;
-  if (!showId) return <main className="shell"><StudioNav /><div className="panel panel-pad"><p className="eyebrow">Host Studio</p><h1 className="title mt-1">No show is ready</h1><p className="mt-3 text-slate-300">Create a show and queue manually approved callers to start a mock run-through.</p><Link href="/shows" className="button-primary mt-5">Create a show</Link></div></main>;
+  if (!showId) redirect("/shows?new=1");
 
   const [show, snapshot, studioState] = await Promise.all([
     prisma.show.findUniqueOrThrow({ where: { id: showId }, select: { id: true, title: true, broadcastToken: true, brandingConfig: true } }),

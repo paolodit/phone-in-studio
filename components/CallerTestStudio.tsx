@@ -7,6 +7,9 @@ import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provi
 import { FishAudioVoiceProvider } from "@/lib/voice/fish-audio-provider";
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
+import { OpenAILiveVoiceProvider } from "@/lib/voice/openai-live-provider";
+import { OPENAI_LIVE_VOICE_OPTIONS } from "@/lib/openai-live-voices";
+import { VoiceRouteOptions } from "@/components/VoiceRouteOptions";
 import type { LiveVoiceSession } from "@/lib/voice/types";
 import type { VoiceProviderId } from "@/lib/show-format";
 
@@ -28,6 +31,7 @@ const emptyLevels: Levels = { input: 0, output: 0, inputBands: Array(12).fill(0)
 
 export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
   const [providerId, setProviderId] = useState<VoiceProviderId>("openai");
+  const [previewVoice, setPreviewVoice] = useState("");
   const [session, setSession] = useState<LiveVoiceSession | null>(null);
   const [status, setStatus] = useState("Ready for a private soundcheck");
   const [message, setMessage] = useState("This test is isolated. It will not change a show, queue, event log or live broadcast output.");
@@ -99,7 +103,7 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
     const attempt = new AbortController();
     connectionAbortRef.current = attempt;
     try {
-      const provider = providerId === "gemini"
+      const provider = providerId === "openai-live" ? new OpenAILiveVoiceProvider() : providerId === "gemini"
         ? new GeminiLiveVoiceProvider()
         : providerId === "elevenlabs"
           ? new ElevenLabsAgentVoiceProvider()
@@ -113,6 +117,7 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
         signal: attempt.signal,
         instructions: "Private caller soundcheck",
         voiceId: caller.voiceId,
+        previewVoice: providerId === "openai-live" && previewVoice ? previewVoice : undefined,
         inputDeviceId: inputDeviceId || undefined,
         onStatus: updateStatus,
         interruptionMode,
@@ -175,9 +180,10 @@ export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
       <div className="panel panel-pad">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow">Voice connection</p><h2 className="mt-1 text-lg font-bold text-white">{status}</h2></div><span className={`status ${session ? "bg-emerald-400 text-emerald-950" : "bg-slate-800 text-slate-300"}`}>{session ? "Test connected" : "Off air"}</span></div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session) || busy}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+          <label><span className="label">Voice route</span><select className="field" value={providerId} onChange={(event) => setProviderId(event.target.value as VoiceProviderId)} disabled={Boolean(session) || busy}><VoiceRouteOptions /></select></label>
           <label><span className="label">Host microphone</span><select className="field" value={inputDeviceId} onChange={(event) => void changeInput(event.target.value)} disabled={!session}><option value="">Default microphone</option>{inputDevices.map((device) => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label>
         </div>
+        {providerId === "openai-live" && <div className="mt-4 space-y-2"><label><span className="label">Audition a GPT-Live voice</span><select className="field" value={previewVoice} onChange={(event) => setPreviewVoice(event.target.value)} disabled={Boolean(session) || busy}><option value="">Use this caller's saved voice match</option>{OPENAI_LIVE_VOICE_OPTIONS.map((voice) => <option key={voice.id} value={voice.id}>{voice.label} · {voice.presentation} · {voice.description}</option>)}</select></label><p className="text-xs leading-5 text-slate-400">An audition changes this test only. End the soundcheck before changing voice. Save your favourite under Edit caller → Voice and delivery. Regional influence is not a guaranteed accent.</p><p className="text-xs leading-5 text-slate-400">Full duplex: try an “uh-huh”, then a clear interruption. The microphone stays open. Connected time, including silence, is billed; end the test when finished.</p></div>}
         <div className="mt-4 flex flex-wrap gap-2">
           {!session ? <button type="button" className="button-primary" onClick={() => void connect()} disabled={busy}><Headphones className="h-4 w-4" /> {busy ? "Connecting test caller…" : "Start private soundcheck"}</button> : <>
             <button type="button" className="button-secondary" onClick={() => void session.interrupt()}><Mic className="h-4 w-4" /> Interrupt caller</button>

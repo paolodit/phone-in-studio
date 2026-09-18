@@ -21,7 +21,7 @@ function configuredProvider(requested: StockImageProvider) {
   return null;
 }
 
-export async function searchStockImages(query: string, requested: StockImageProvider): Promise<{ provider: Exclude<StockImageProvider, "auto">; results: StockImageResult[] }> {
+export async function searchStockImages(query: string, requested: StockImageProvider, signal?: AbortSignal): Promise<{ provider: Exclude<StockImageProvider, "auto">; results: StockImageResult[] }> {
   const provider = configuredProvider(requested);
   if (!provider) {
     const required = requested === "auto" ? "PEXELS_API_KEY or PIXABAY_API_KEY" : requested === "pexels" ? "PEXELS_API_KEY" : "PIXABAY_API_KEY";
@@ -32,6 +32,7 @@ export async function searchStockImages(query: string, requested: StockImageProv
     const response = await fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12&orientation=landscape`, {
       headers: { Authorization: process.env.PEXELS_API_KEY ?? "" },
       cache: "no-store",
+      signal,
     });
     if (!response.ok) throw new Error(response.status === 401 ? "Pexels rejected the API key." : "Pexels image search is unavailable right now.");
     const body = await response.json() as PexelsResponse;
@@ -49,7 +50,7 @@ export async function searchStockImages(query: string, requested: StockImageProv
     };
   }
 
-  const response = await fetch(`https://pixabay.com/api/?key=${encodeURIComponent(process.env.PIXABAY_API_KEY ?? "")}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=12`, { cache: "no-store" });
+  const response = await fetch(`https://pixabay.com/api/?key=${encodeURIComponent(process.env.PIXABAY_API_KEY ?? "")}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=12`, { cache: "no-store", signal });
   if (!response.ok) throw new Error(response.status === 400 ? "Pixabay rejected the API key or search request." : "Pixabay image search is unavailable right now.");
   const body = await response.json() as PixabayResponse;
   return {

@@ -23,7 +23,7 @@ function currentMicrophoneAccessIssue() {
   });
 }
 
-async function getMicrophone(constraints: MediaTrackConstraints) {
+export async function getMicrophone(constraints: MediaTrackConstraints) {
   const issue = currentMicrophoneAccessIssue();
   if (issue) throw new Error(issue);
   try {
@@ -37,7 +37,7 @@ async function getMicrophone(constraints: MediaTrackConstraints) {
   }
 }
 
-function level(analyser: AnalyserNode | undefined) {
+export function level(analyser: AnalyserNode | undefined) {
   if (!analyser) return 0;
   const values = new Uint8Array(analyser.fftSize);
   analyser.getByteTimeDomainData(values);
@@ -45,7 +45,7 @@ function level(analyser: AnalyserNode | undefined) {
   return Math.min(1, sum / values.length / 40);
 }
 
-function frequencyBands(analyser: AnalyserNode | undefined, count = 12) {
+export function frequencyBands(analyser: AnalyserNode | undefined, count = 12) {
   if (!analyser) return Array.from({ length: count }, () => 0);
   const values = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(values);

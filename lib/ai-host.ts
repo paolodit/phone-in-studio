@@ -26,6 +26,7 @@ export async function generateHostTurn(input: {
   caller?: Pick<Caller, "firstName" | "location" | "occupation" | "issueHeadline" | "openingSummary"> | null;
   transcript: HostTranscriptEntry[];
   intent?: "respond" | "close";
+  signal?: AbortSignal;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI Host is not configured. Add OPENAI_API_KEY and restart the server.");
@@ -34,16 +35,23 @@ export async function generateHostTurn(input: {
     : "This is a private soundcheck; the producer is role-playing a caller.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
+    signal: input.signal ? AbortSignal.any([input.signal, AbortSignal.timeout(25_000)]) : AbortSignal.timeout(25_000),
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: process.env.OPENAI_HOST_MODEL ?? process.env.OPENAI_CALLER_GENERATION_MODEL ?? "gpt-5.4-mini",
       store: false,
-      max_output_tokens: 180,
+      max_output_tokens: 512,
       instructions: buildHostInstructions(input.profile),
       input: `${input.show ? `Show: ${input.show.title}\n` : ""}${callerContext}\n\nConversation so far:\n${input.transcript.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n") || "CALLER: Hello, I've just come through."}\n\n${input.intent === "close" ? "Close this call warmly and naturally in one short spoken line. Thank or acknowledge the caller without asking another question. Do not announce the next caller." : "Write only the host's next spoken line."}`,
     }),
   });
   const payload = await response.json().catch(() => null) as Parameters<typeof extractResponseText>[0] | null;
   if (!response.ok || !payload) throw new Error("The AI Host could not prepare its next line. Try again.");
-  return extractResponseText(payload).trim();
+  const result = payload as typeof payload & { status?: string };
+  if (result.status === "incomplete") throw new Error("The AI Host reply was cut short during generation. Retry this turn or check OPENAI_HOST_MODEL.");
+  let text: string;
+  try { text = extractResponseText(payload).trim(); }
+  catch { throw new Error("The AI Host returned no spoken reply. Retry this turn or check OPENAI_HOST_MODEL."); }
+  if (!text || text.length > 1_000) throw new Error("The AI Host did not return a short spoken line. Please retry this turn.");
+  return text;
 }

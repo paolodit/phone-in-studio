@@ -33,16 +33,16 @@ export async function StudioNav() {
             <span className="sr-only">Open {show.title}</span>
           </Link>)}
         </div>
-        <Link href="/shows?new=1" title="Create a show" className="mt-2 flex h-12 w-full items-center justify-center rounded-xl border border-dashed border-cyan-300/50 text-cyan-300 transition hover:bg-cyan-300/10">
+        <Link href="/shows?new=1" title="Create a channel" className="mt-2 flex h-12 w-full items-center justify-center rounded-xl border border-dashed border-cyan-300/50 text-cyan-300 transition hover:bg-cyan-300/10">
           <Plus className="h-5 w-5" />
-          <span className="sr-only">Create a show</span>
+          <span className="sr-only">Create a channel</span>
         </Link>
       </aside>
 
       <div className="-mt-4 mb-6 flex gap-2 overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50 p-2 lg:hidden" aria-label="Show workspaces">
         <Link href="/shows" className="flex h-10 shrink-0 items-center gap-2 rounded-lg bg-slate-800 px-3 text-xs font-bold text-slate-200"><Radio className="h-4 w-4" /> Shows</Link>
         {shows.map((show) => <Link key={show.id} href={`/shows/${show.id}`} className="flex h-10 max-w-40 shrink-0 items-center rounded-lg border border-slate-700 bg-slate-950 px-3 text-xs font-bold text-slate-300"><span className="truncate">{show.title}</span></Link>)}
-        <Link href="/shows?new=1" className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-dashed border-cyan-300/50 px-3 text-xs font-bold text-cyan-200"><Plus className="h-4 w-4" /> New show</Link>
+        <Link href="/shows?new=1" className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-dashed border-cyan-300/50 px-3 text-xs font-bold text-cyan-200"><Plus className="h-4 w-4" /> New channel</Link>
       </div>
     </>
   );

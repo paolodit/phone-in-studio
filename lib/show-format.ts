@@ -9,7 +9,7 @@ export const SHOW_FORMATS = [
 ] as const;
 
 export type ShowFormatId = typeof SHOW_FORMATS[number]["id"];
-export type VoiceProviderId = "openai" | "gemini" | "elevenlabs" | "fish";
+export type VoiceProviderId = "openai" | "openai-live" | "gemini" | "elevenlabs" | "fish";
 
 export type ShowFormatConfig = {
   programmeName: string;
@@ -33,7 +33,7 @@ export function readShowFormatConfig(brandingConfig: unknown, fallbackTitle: str
     formatId: format.id,
     formatLabel: format.label,
     formatGuidance: typeof config.formatGuidance === "string" && config.formatGuidance.trim() ? config.formatGuidance : format.guidance,
-    voiceProvider: config.voiceProvider === "gemini"
+    voiceProvider: config.voiceProvider === "openai-live" ? "openai-live" : config.voiceProvider === "gemini"
       ? "gemini"
       : config.voiceProvider === "elevenlabs"
         ? "elevenlabs"
@@ -43,15 +43,16 @@ export function readShowFormatConfig(brandingConfig: unknown, fallbackTitle: str
   };
 }
 
-export function buildShowFormatConfig(input: { title: string; formatId?: string; formatGuidance?: string; voiceProvider?: string }, existing?: unknown): ShowFormatConfig {
+export function buildShowFormatConfig(input: { title: string; formatId?: string; formatGuidance?: string; voiceProvider?: string }, existing?: unknown): ShowFormatConfig & Record<string, unknown> {
   const current = readShowFormatConfig(existing, input.title);
   const format = formatFor(input.formatId ?? current.formatId);
   return {
+    ...(isRecord(existing) ? existing : {}),
     programmeName: input.title,
     formatId: format.id,
     formatLabel: format.label,
     formatGuidance: input.formatGuidance?.trim() || current.formatGuidance || format.guidance,
-    voiceProvider: input.voiceProvider === "gemini"
+    voiceProvider: input.voiceProvider === "openai-live" ? "openai-live" : input.voiceProvider === "gemini"
       ? "gemini"
       : input.voiceProvider === "elevenlabs"
         ? "elevenlabs"

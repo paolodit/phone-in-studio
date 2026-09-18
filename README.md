@@ -17,6 +17,7 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-2563eb?logo=typescript&logoColor=white" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Prisma-334155?logo=postgresql&logoColor=white" />
   <img alt="OpenAI Realtime" src="https://img.shields.io/badge/Voice-OpenAI_Realtime-0f766e" />
+  <img alt="GPT-Live-1 full duplex" src="https://img.shields.io/badge/Voice-GPT--Live--1_full_duplex-0891b2" />
   <img alt="Gemini Live optional" src="https://img.shields.io/badge/Voice-Gemini_Live_optional-1d4ed8" />
   <img alt="ElevenLabs optional" src="https://img.shields.io/badge/Voice-ElevenLabs_optional-4c1d95" />
   <img alt="Fish Audio optional" src="https://img.shields.io/badge/Voice-Fish_Audio_optional-2563eb" />
@@ -68,6 +69,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Selectable generated avatars, OpenAI image generation, Pexels and Pixabay visuals.
 - Private caller soundchecks that cannot alter the live queue or programme output.
 - OpenAI Realtime 1.5 browser voice as the default, with host/caller meters and transcripts.
+- Optional **GPT-Live-1 full-duplex caller audio**, with 22 voice choices, compatible casting and private voice auditions. It is a separate adapter, not a renamed Realtime model.
 - Optional Gemini Live routing with server-minted one-use browser credentials, native audio and adjustable VAD.
 - Optional ElevenLabs Conversational AI and Fish Audio turn-based comparison routes with per-caller voice IDs.
 - Explicit voice-presentation casting for generated and manually edited callers, with compatible OpenAI and Gemini voice selection.
@@ -91,7 +93,7 @@ The format is intentionally flexible. It can support advice, audience stories, s
 - Node.js 20 or newer; Node 22 is recommended.
 - npm.
 - Chrome or Edge for microphone and WebRTC testing.
-- An OpenAI API key for caller generation, AI images and OpenAI Realtime voice.
+- An OpenAI API key for caller generation, AI images and OpenAI voice routes; GPT-Live requires model access on that API project.
 
 ### First run on Windows
 
@@ -116,7 +118,7 @@ OPENAI_API_KEY=your-server-side-openai-key
 Open [http://localhost:3000](http://localhost:3000) and sign in with `ADMIN_PASSWORD`.
 
 > [!CAUTION]
-> `npm run db:local:init` applies migrations and resets the development fixtures. Use it for first-time setup or an intentional reset, not as the normal start command when you want to retain local shows and callers.
+> `npm run db:local:init` applies migrations without seeding or resetting user data. A fresh installation opens channel creation after login. The old demonstration callers remain available as an optional `npm run db:demo` import; `npm run db:seed` is a separate, destructive development-fixture reset, not a normal installation/start step.
 
 For later sessions, normally run only:
 
@@ -150,8 +152,9 @@ All provider credentials remain server-side. Never commit `.env.local`.
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | Yes | Password for the local admin login. |
 | `AUTH_SECRET` | Yes | Signs the HTTP-only admin session cookie. Use a long, unique value. |
-| `OPENAI_API_KEY` | Recommended | Caller Workshop, OpenAI Realtime and AI image generation. |
+| `OPENAI_API_KEY` | Recommended | Caller Workshop, OpenAI Realtime, GPT-Live and AI image generation. |
 | `OPENAI_REALTIME_MODEL` | No | Overrides the default `gpt-realtime-1.5` voice model. |
+| `OPENAI_LIVE_MODEL` | No | Overrides `gpt-live-1` for the separate GPT-Live adapter. Do not put this model in `OPENAI_REALTIME_MODEL`. |
 | `OPENAI_CALLER_GENERATION_MODEL` | No | Overrides the Caller Workshop model. |
 | `OPENAI_HOST_MODEL` | No | Overrides the model used to write AI Host turns. |
 | `OPENAI_HOST_TTS_MODEL` | No | Overrides the speech model used for the AI Host; defaults to `tts-1`. |
@@ -174,6 +177,24 @@ Restart `npm run dev` after changing environment variables.
 
 ## Using the studio
 
+### First channel and starter packs
+
+On a fresh installation, login opens **Create your first channel**. **Shows → New channel** and the sidebar’s plus button open the same flow for subsequent channels. A channel remains the existing Show workspace internally—there is no separate scheduling or broadcast engine.
+
+1. **Give Me the Keys** keeps the existing blank-show setup and the “Make tonight’s show” planner.
+2. **I’ll Take the Mic** is selected by default. Its menu contains **Am I the A\*\*hole?**, **Who Booked These Guests?** and **Bad Joke Hotline**, each designed for six independent curated guests.
+3. **Auto-run the Show** has one preset for an AI presenter and five independent guests. Creation opts into AI Host but does not arm auto-run or start voice billing.
+
+**Editorial status:** the final human casts, and the auto-run theme/presenter/cast, are awaiting confirmation. The cards are visible but cannot be created until their definitions are complete. No unrelated demo characters are silently substituted. The custom route works now. See [starter-pack authoring](docs/STARTER-PACKS.md) to finish or extend the catalogue.
+
+Published packs are copied into ordinary, editable shows, callers, assets and (for auto-run) presenter profiles. Future template changes do not overwrite those copies. Music defaults on at a quiet level and starts with Start/Answer or an explicit auto-run start—not on page load. Studio’s Music tab retains track choice, volume, repeat and Stop, with an on/off preference saved per channel in this browser. Image autoplay defaults on for every caller and stays adjustable in Visuals. Pack creation prepares credited images from the existing Pexels/Pixabay integration, or uses explicitly curated existing images; missing stock credentials/results keep the portrait and produce a visible warning.
+
+### Deleting a channel
+
+Use **Delete channel** on its card or in Show options. The confirmation identifies the channel, requires its exact name and explains the permanent removal of its queue, events/transcripts, custom cues, per-show settings and broadcast link. A live show must be ended first.
+
+Reusable caller cards/assets and presenter profiles stay. Factory batches are detached, saved plans return to draft, and other channels are unaffected. Browser recordings are retained and remain accessible at the channel’s original recordings URL (bookmark it or download first). Open Studio tabs move back to Channels; an open deleted broadcast is cleared. Deleting the last channel returns to creation.
+
 ### The quickest route: make tonight’s show
 
 Open **Shows → Make tonight’s show**. Give it one creative brief—something like “a late-night show about starting over, with warmth, awkwardness and one strange caller”—then choose the length and four or six callers.
@@ -195,23 +216,23 @@ Open **Callers** and choose one of two routes:
 
 The AI workshop never publishes automatically. Generated callers stay private until a producer reviews and approves them.
 
-Caller graphics can come from the stored avatar library, a custom image URL, OpenAI image generation or a stock provider. Prepared topic images are separate from the caller portrait and are always triggered manually by the producer or host.
+Caller graphics can come from the stored avatar library, a custom image URL, OpenAI image generation or a stock provider. Prepared topic images are separate from the caller portrait: tap them manually or enable **Autoplay images** in Studio to cycle them for every caller.
 
 ### 2. Test the caller privately
 
 Open a caller and choose **Test voice privately**.
 
-The soundcheck supports OpenAI Realtime, Gemini Live, ElevenLabs or Fish Audio, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
+The soundcheck supports OpenAI Realtime, GPT-Live-1, Gemini Live, ElevenLabs or Fish Audio, displays microphone and caller-output meters, and keeps a temporary transcript. **Open test output** provides a separate presentation view for checking the portrait and caller EQ.
 
 This test route does not update a show, running order, production event log or live broadcast display. Use headphones, hear the opening line, speak naturally and pause for the reply.
 
 ### 3. Create a show
 
-Open **Shows**, choose **New show**, then configure:
+Open **Shows**, choose **New channel → Give Me the Keys**, then configure:
 
 - programme title and format;
 - show-level caller guidance;
-- OpenAI Realtime, Gemini Live, ElevenLabs or Fish Audio voice routing;
+- OpenAI Realtime, GPT-Live-1, Gemini Live, ElevenLabs or Fish Audio voice routing;
 - approved callers and their running order;
 - custom sound cues and shortcuts;
 - the private broadcast-output link.
@@ -276,13 +297,21 @@ The normal first-run experience remains a human host building or choosing caller
 1. Enable **AI Host** under Optional modules.
 2. Create a presenter profile with a public identity, voice, style and a few behavioural sliders.
 3. Use the private soundcheck to hear one response without touching a live show.
-4. Assign the profile to a show and choose **AI host · supervised** or **AI host · auto-run**.
-5. In supervised mode, press **AI host: one turn** when the presenter should speak.
-6. In auto-run mode, choose a per-caller presenter-turn limit, delay between calls and visual policy, then deliberately press **Start auto-run** in Studio.
+4. Open the show’s **Options → Who hosts this show?**. Choose **AI presenter · one turn at a time** or **AI presenter · automatic conversations**, select the presenter, then **Save & open Studio**. Selecting **You · human host** turns AI hosting off for this show; there is no second enable checkbox to conflict with this choice.
+5. For one-turn hosting, answer and connect a caller first, then press **AI host: one turn**. The presenter control explains this prerequisite when it is not yet available.
+6. For automatic conversations, choose a per-caller presenter-turn limit, delay between calls and visual policy, then deliberately press **Start auto-run** in Studio. Keep that Studio open; it runs the audio and queue. Provider connections may still require browser microphone permission; use headphones.
 
 Auto-run starts and answers queued callers, responds after completed caller turns, closes at the configured turn limit, and advances the running order. It never arms on page load. **Take over**, **Pause auto-run** and **Emergency Stop** remain authoritative, and a generation, speech or transition error pauses automation for the human host.
 
-Automated topic visuals have three policies: **Off** keeps the portrait on screen; **Prepare** gives the host three credited stock images to trigger manually; **Full auto** prepares those images and shows the primary one after the caller's opening contribution. Images are fetched while developing or accepting the candidate rather than during the live call. A missing provider key, empty search or display error falls back to the portrait and never stops the audio conversation.
+The presenter still uses a text-generation → speech pipeline, not a second GPT-Live agent. Its exact spoken line is handed to the caller after playback finishes. Short acknowledgements from a microphone cannot drive an automatic conversation: auto-run mutes microphone input, and **Take over** restores it. Private soundcheck Stop cancels both pending generation and playing audio. No host test writes to a live show.
+
+Automated topic preparation has three policies: **Off** does not prepare or select an image automatically; **Prepare** gives the host three credited stock images to trigger manually; **Full auto** prepares those images and shows the primary one after the caller's opening contribution. Images are fetched while developing or accepting the candidate rather than during the live call. A missing provider key, empty search or display error falls back to the portrait and never stops the audio conversation. The independent slideshow below takes precedence when enabled.
+
+### Image autoplay — for human or AI hosts
+
+In **Studio → On-air tools → Visuals**, switch on **Autoplay images**. This is saved for the whole show, not one caller. Choose 5, 10, 15, 20 or 30 seconds per image (10 by default). While each caller is on air, their queued supporting images loop with the original creator credits. One image stays visible; no images leaves the portrait. New callers start their own set, and held/ended calls stop cycling.
+
+Tap a thumbnail to jump to it and restart the interval. Uncheck autoplay to keep the current image still; **Clear visual** stops autoplay and removes it. Output windows follow a shared persisted clock, so OBS and browser previews keep cycling without a foreground Studio tab or repeated database writes. Each output receives only the current caller’s public image fields; private character instructions and provider keys stay on the server.
 
 ### Caller Factory
 
@@ -312,6 +341,21 @@ Each caller can have a supported voice, perceived voice-presentation preference,
 While a caller is connected, the Host Studio exposes three centred sliders: **Energy**, **Pace** and **Answer length**. They nudge the next reply relative to the saved caller card and reset for every new caller. They do not permanently edit the character. Gemini queues a change until its current answer finishes so moving a control cannot interrupt the caller.
 
 Microphone access requires `http://localhost:3000` on the same computer or an HTTPS deployment. A plain HTTP LAN address is not a secure browser context and cannot use `getUserMedia`.
+
+### OpenAI GPT-Live-1 · full duplex
+
+Use the existing `OPENAI_API_KEY`, then choose **OpenAI GPT-Live-1 (full duplex)** in **Studio → Audio setup → Caller route**, a show's **Options**, or a caller's **private soundcheck**. Existing shows stay on their current route; Realtime 1.5 remains the default. No database migration or extra Agent ID is needed.
+
+**Cast each caller, not just the show.** GPT-Live offers 22 built-in voices. The saved OpenAI voice and voice-presentation preference remain the default match. To give a caller a different Live voice, open **Edit caller → Voice and delivery → GPT-Live voice**. Regional choices include Vesper (British masculine), Willow (Irish feminine), Stone (Irish masculine), Quartz (Australian feminine) and Ripple (Australian masculine). Regional influence is a guide, not a guaranteed accent. **Any** permits an exact producer choice without presentation matching. In a private soundcheck, the audition selector lets you compare voices without saving them or changing the live show. End a test before changing its voice.
+
+This adapter uses the dedicated [Live API](https://developers.openai.com/api/docs/guides/live), a short caller-specific prompt and continuous WebRTC audio. It waits for `session.started` and acknowledges opening instructions before prompting the caller to begin. It does **not** reuse Realtime's semantic VAD, transcript-cancellation heuristic, `response.create` loop or Gemini's microphone gate. The caller can listen while speaking; instructions distinguish brief “uh-huh” acknowledgements from a host deliberately taking the floor. Real-room behaviour still needs a headset test—this is not a promise of perfect interruption detection.
+
+**Space / Interrupt** silences local playback immediately and asks the model to yield. Live has no Realtime-style output-cancel command; playback is re-armed after measured remote silence. Caller volume, mute, input-device switching, producer direction, transcript display, broadcast EQ and Studio-tab recording use the existing workflow. The optional AI Host still uses its existing presenter text/TTS route; this change adds GPT-Live for the callers, not a second autonomous Live agent.
+
+> [!IMPORTANT]
+> GPT-Live is billed for connected time, including silence and hold. Use **End call / End test** when finished. The adapter sends `session.close`, waits for confirmation, and uses a server-side hangup fallback on connection failure. API recording is disabled with `store: false`; your optional local Studio recording is separate. No external tools or background research are enabled for the Live caller.
+
+For setup details, protocol boundaries and a repeatable test checklist, see **[GPT-Live integration notes](./docs/GPT-LIVE.md)** and OpenAI's [Live prompting guidance](https://developers.openai.com/api/docs/guides/live-prompting).
 
 ### Gemini Live
 
@@ -389,7 +433,7 @@ Same-browser output previews receive meter frames directly through a show-scoped
 - `.env.local` is server-only and must not be committed.
 - The admin session uses an HTTP-only signed cookie.
 - Permanent OpenAI, Gemini, ElevenLabs and Fish Audio keys are never returned to the browser.
-- The broadcast API exposes only public identity, public issue, caller graphic and the selected visual.
+- The broadcast API exposes only public identity, public issue, caller graphic and the selected visual (plus a public image playlist while autoplay is enabled).
 - Hidden story details, private prompts and producer notes remain inside authenticated tools.
 - Generated and stock images still require editorial, licensing and broadcast-safety review.
 
@@ -401,14 +445,16 @@ For an internet-facing deployment, still add TLS, managed secrets, database back
 | --- | --- |
 | `npm run dev` | Start the local database if required and run Next.js development mode. |
 | `npm run db:generate` | Regenerate the Prisma client. |
-| `npm run db:local:init` | Apply migrations and reset local fixtures. |
+| `npm run db:local:init` | Apply migrations without resetting or seeding channels. |
 | `npm run db:local:migrate` | Apply local schema updates without resetting shows or callers. |
+| `npm run verify:channels` | Verify pack creation and deletion in a separate, automatically removed local test schema; no provider calls. |
 | `npm run db:local:stop` | Stop the detached local database runtime. |
 | `npm run lint` | Run the TypeScript no-emit check. |
 | `npm test` | Run the Vitest suite. |
 | `npm run verify:local` | Verify an isolated show-state, persistence and privacy flow. |
 | `npm run verify:planner` | Verify private planning and idempotent off-air approval using temporary, self-cleaning database fixtures. |
 | `npm run verify:realtime` | Verify an OpenAI temporary session credential without sending audio. |
+| `npm run verify:live -- --allow-billable` | Opt-in API smoke check for two GPT-Live voices using synthetic silence. Creates short billable sessions; captures no microphone and saves no audio. |
 | `npm run build` | Create a production build; stop the development server first. |
 
 ## Troubleshooting
@@ -443,6 +489,17 @@ For a new checkout, run `npm run db:local:init` once first.
 - Use headphones to prevent feedback.
 - End and reconnect; each attempt creates a fresh short-lived credential.
 - Use the mock speaker line to separate output-device problems from provider problems.
+</details>
+
+<details>
+<summary><strong>GPT-Live cannot connect or its voice does not change</strong></summary>
+
+- Confirm the API project has access to `gpt-live-1` and the server has `OPENAI_API_KEY`. A model appearing in the selector does not guarantee account access.
+- Select the dedicated **GPT-Live-1** route, not Realtime with a renamed model. Leave `OPENAI_LIVE_MODEL` unset to use its default.
+- End the existing session before changing voices; Live fixes its model and voice at startup.
+- Stored voice choices respect the caller's voice-presentation preference. Choose a compatible voice or set presentation to **Any**. The private audition selector deliberately previews your exact selection.
+- If shutdown cannot be confirmed, check the API project's active sessions before leaving the app unattended.
+- Keep the microphone stream running, use headphones, and verify browser audio playback. Silence is valid input; no push-to-talk or manual reply trigger is needed.
 </details>
 
 <details>
@@ -483,7 +540,7 @@ These are the immediate engineering priorities. The broader product directions�
 - Test the complete brief → line-up → live show → local recording loop with a real headset and short show.
 - Build clip export from marked moments, with caption editing and portrait/landscape presentation; the current recorder exports audio, not video.
 - Add reusable show identities and more purposeful editorial pacing, without making preparation a long form.
-- Real-room comparison and tuning across OpenAI 1.5, Gemini Live, ElevenLabs and the turn-based Fish Audio route.
+- Real-room comparison and tuning across GPT-Live-1, OpenAI Realtime 1.5, Gemini Live, ElevenLabs and the turn-based Fish Audio route.
 - Real-show testing and recovery tuning for guarded AI Host auto-run.
 - Scheduling, cost caps and semantic duplicate detection for recurring Caller Factory batches.
 - A 1:1 output preset plus user-adjustable safe areas and theme controls.
