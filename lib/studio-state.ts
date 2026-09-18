@@ -1,5 +1,8 @@
 import type { ShowStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { globalModuleState } from "@/lib/modules";
+import { readVisualAutoplay, type VisualAutoplaySettings } from "@/lib/visual-autoplay";
+import { readBackgroundMusic, type BackgroundMusicSettings } from "@/lib/background-music";
 
 export type StudioCaller = {
   id: string;
@@ -18,8 +21,12 @@ export type StudioCaller = {
 
 export type StudioState = {
   showStatus: ShowStatus;
+  visualAutoplay?: VisualAutoplaySettings;
+  backgroundMusic?: BackgroundMusicSettings;
   aiHost: null | {
     enabled: boolean;
+    available?: boolean;
+    configured?: boolean;
     mode: "HUMAN" | "AI_SUPERVISED" | "AI_AUTONOMOUS";
     maxTurnsPerCaller: number;
     betweenCallsSeconds: number;
@@ -46,13 +53,18 @@ export async function getStudioState(showId: string): Promise<StudioState> {
     },
   });
   const current = show.queueItems.find((item) => item.id === show.currentQueueItemId) ?? null;
+  const modules = await globalModuleState();
   const aiHostSetting = show.moduleSettings.find((setting) => setting.key === "AI_HOST");
   const aiHostConfig = object(aiHostSetting?.config);
   const visualPolicyValue = String(aiHostConfig.visualPolicy ?? (show.hostMode === "AI_AUTONOMOUS" ? "AUTO_SHOW" : "OFF"));
   return {
     showStatus: show.status,
+    visualAutoplay: readVisualAutoplay(show.brandingConfig),
+    backgroundMusic: readBackgroundMusic(show.brandingConfig),
     aiHost: {
-      enabled: Boolean(aiHostSetting?.enabled && show.hostProfile),
+      available: modules.AI_HOST,
+      configured: Boolean(process.env.OPENAI_API_KEY),
+      enabled: Boolean(modules.AI_HOST && aiHostSetting?.enabled && show.hostProfile?.active),
       mode: show.hostMode,
       maxTurnsPerCaller: Math.max(1, Math.min(8, Number(aiHostConfig.maxTurnsPerCaller ?? 4))),
       betweenCallsSeconds: Math.max(1, Math.min(15, Number(aiHostConfig.betweenCallsSeconds ?? 3))),

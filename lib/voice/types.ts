@@ -5,6 +5,8 @@ export type CallerSessionConfig = {
   signal?: AbortSignal;
   instructions: string;
   voiceId: string;
+  /** Private GPT-Live audition only; never overrides production casting. */
+  previewVoice?: string;
   inputDeviceId?: string;
   interruptionMode?: "guarded" | "manual";
   onPlaybackChange?: (speaking: boolean) => void;

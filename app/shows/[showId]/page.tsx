@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { DeleteChannelDialog } from "@/components/DeleteChannelDialog";
 import { Bot, ExternalLink, Factory, ListOrdered, Mic2, Monitor, Settings2, Smartphone } from "lucide-react";
 import { LiveQueueAdder } from "@/components/LiveQueueAdder";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
@@ -12,6 +14,7 @@ import {
   updateShowAction,
 } from "@/lib/actions/show-actions";
 import { updateShowModulesAction } from "@/lib/actions/module-actions";
+import { HostAssignmentFields } from "@/components/HostAssignmentFields";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canResetShowForReplay } from "@/lib/show-service";
@@ -26,7 +29,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
   const { section } = await searchParams;
   const moduleState = await globalModuleState();
   const [show, approvedCallers, hostProfiles] = await Promise.all([
-    prisma.show.findUniqueOrThrow({
+    prisma.show.findUnique({
       where: { id: showId },
       include: {
         queueItems: {
@@ -44,6 +47,8 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
     }),
     moduleState.AI_HOST ? prisma.hostProfile.findMany({ where: { active: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
   ]);
+  if (!show) redirect("/shows");
+  const pack = object(object(show.brandingConfig).starterPack);
   const broadcastUrl = `/broadcast/${show.id}?token=${show.broadcastToken}&mode=full&layout=web`;
   const hasFinishedCallers = show.queueItems.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status));
   const formatConfig = readShowFormatConfig(show.brandingConfig, show.title);
@@ -67,6 +72,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
     </div>
 
     <nav className="mt-5 flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-2" aria-label="Show workspace"><Link href={`/studio?show=${show.id}`} className="button-secondary"><Mic2 className="h-4 w-4" /> Studio</Link><Link href={`/shows/${show.id}#running-order`} className="button-primary"><ListOrdered className="h-4 w-4" /> Running order</Link><Link href={`/shows/${show.id}?section=options#show-options`} className="button-secondary"><Settings2 className="h-4 w-4" /> Options</Link></nav>
+    {typeof pack.name === "string" && <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-sm leading-6 text-slate-300"><p>Started from <strong>{pack.name}</strong>. This is your editable copy; template updates will not change it. The pack starts with music and image autoplay on; adjust both in Studio.</p>{Number(pack.missingVisuals) > 0 && <p className="mt-2 text-amber-200">At creation, stock images could not be prepared for {Number(pack.missingVisuals)} guests. Their portraits remain available. If needed, configure Pexels or Pixabay and add images using the existing caller media tools.</p>}</div>}
 
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
       <section id="running-order" className="panel panel-pad scroll-mt-6">
@@ -115,7 +121,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       <form action={updateShowAction.bind(null, show.id)} className="mt-5 grid gap-3 border-t border-slate-700/70 pt-5 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
         <label><span className="label">Programme title</span><input className="field" name="title" defaultValue={show.title} required /></label>
         <label><span className="label">Show format</span><select className="field" name="formatId" defaultValue={formatConfig.formatId}>{SHOW_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.label}</option>)}</select></label>
-        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="openai-live">OpenAI GPT-Live-1 (full duplex)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
         <button className="button-secondary" type="submit">Save setup</button>
         <label className="lg:col-span-3"><span className="label">Format guidance for AI callers</span><textarea className="field min-h-20" name="formatGuidance" defaultValue={formatConfig.formatGuidance} placeholder="Give callers the tone, host relationship and purpose of this format." /></label>
         <p className="text-xs leading-5 text-slate-400">Gemini Live needs <code>GEMINI_API_KEY</code>. ElevenLabs needs <code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code>. Fish needs <code>FISH_API_KEY</code> and remains turn-based because Fish supplies TTS/ASR rather than a duplex conversation model. Permanent keys stay server-side.</p>
@@ -125,10 +131,8 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
         <form action={updateShowModulesAction.bind(null, show.id)} className="mt-4 grid gap-4 lg:grid-cols-2">
           {moduleState.AI_HOST && <div className="rounded-xl border border-violet-300/20 bg-violet-300/5 p-4">
             <div className="flex items-start gap-3"><Bot className="mt-0.5 h-5 w-5 text-violet-200" /><div><p className="font-bold text-white">AI Host</p><p className="mt-1 text-xs leading-5 text-slate-400">Choose one-turn supervision or a deliberately armed automatic running mode. Human takeover remains immediate.</p></div></div>
-            <label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-200"><input type="checkbox" name="aiHostEnabled" defaultChecked={Boolean(aiHostSetting?.enabled)} /> Enable for this show</label>
+            <HostAssignmentFields mode={show.hostMode} profileId={show.hostProfileId} profiles={hostProfiles} />
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label><span className="label">Presenter</span><select className="field" name="hostProfileId" defaultValue={show.hostProfileId ?? ""}><option value="">Choose a profile</option>{hostProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
-              <label><span className="label">Host mode</span><select className="field" name="hostMode" defaultValue={show.hostMode}><option value="HUMAN">Human host</option><option value="AI_SUPERVISED">AI host · supervised</option><option value="AI_AUTONOMOUS">AI host · auto-run</option></select></label>
               <label><span className="label">Conversation turns</span><input className="field" type="number" name="autoMaxTurns" min="1" max="8" defaultValue={Number(aiHostConfig.maxTurnsPerCaller ?? 4)} /></label>
               <label><span className="label">Seconds between calls</span><input className="field" type="number" name="autoBetweenCallsSeconds" min="1" max="15" defaultValue={Number(aiHostConfig.betweenCallsSeconds ?? 3)} /></label>
               <label><span className="label">Automated topic visuals</span><select className="field" name="autoVisualPolicy" defaultValue={String(aiHostConfig.visualPolicy ?? (show.hostMode === "AI_AUTONOMOUS" ? "AUTO_SHOW" : "OFF"))}><option value="OFF">Off · portraits only</option><option value="PREPARE">Prepare · host triggers</option><option value="AUTO_SHOW">Full auto · prepare and show</option></select></label>
@@ -138,12 +142,12 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
           </div>}
           {moduleState.CALLER_FACTORY && <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4"><div className="flex items-start gap-3"><Factory className="mt-0.5 h-5 w-5 text-cyan-200" /><div><p className="font-bold text-white">Caller Factory</p><p className="mt-1 text-xs leading-5 text-slate-400">Allows a candidate batch to be developed with this show as its editorial home.</p></div></div><label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-200"><input type="checkbox" name="callerFactoryEnabled" defaultChecked={Boolean(show.moduleSettings.find((item) => item.key === "CALLER_FACTORY")?.enabled)} /> Enable for this show</label><Link className="button-secondary mt-3" href="/callers/factory"><Factory className="h-4 w-4" /> Open Caller Factory</Link></div>}
           {!moduleState.AI_HOST && <input type="hidden" name="hostMode" value="HUMAN" />}
-          <div className="lg:col-span-2"><button className="button-primary">Save module setup</button></div>
+          <div className="flex flex-wrap items-center gap-3 lg:col-span-2"><button className="button-primary">Save & open Studio</button><span className="text-xs text-slate-400">Saves this show’s hosting mode and module options. Auto-run still requires an explicit start.</span></div>
         </form>
       </section>}
       <div className="mt-3 flex flex-wrap gap-2">
         {canResetShowForReplay(show.broadcastState) && hasFinishedCallers && <form action={resetShowForReplayAction.bind(null, show.id)}><button className="button-secondary">Requeue every caller</button></form>}
-        {show.status !== "LIVE" && <form action={deleteShowAction.bind(null, show.id)}><button className="button-danger">Delete show</button></form>}
+        <DeleteChannelDialog id={show.id} title={show.title} live={show.status === "LIVE"} action={deleteShowAction.bind(null, show.id)} />
       </div>
     </details>
 

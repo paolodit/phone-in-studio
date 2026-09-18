@@ -8,12 +8,16 @@ import { prisma } from "@/lib/prisma";
 import { showSetupSchema, soundEffectFormSchema } from "@/lib/schemas";
 import { buildShowFormatConfig } from "@/lib/show-format";
 import { queueApprovedCaller, resetShowForReplay } from "@/lib/show-service";
+import { createChannel } from "@/lib/channel-creation";
+import { deleteChannel } from "@/lib/channel-deletion";
 
-export async function createShowAction(formData: FormData) {
+export async function createShowAction(_: { error?: string }, formData: FormData): Promise<{ error?: string }> {
   await requireAdmin();
-  const title = String(formData.get("title") ?? "").trim();
-  if (title.length < 3 || title.length > 120) throw new Error("Show title must be between 3 and 120 characters.");
-  const show = await prisma.show.create({ data: { title, brandingConfig: buildShowFormatConfig({ title }) as Prisma.InputJsonValue } });
+  let show;
+  try {
+    show = await createChannel({ title: String(formData.get("title") ?? ""), mode: String(formData.get("mode") ?? "custom"), packId: String(formData.get("packId") ?? "") });
+  } catch (error) { return { error: error instanceof Error && !(error instanceof Prisma.PrismaClientKnownRequestError) ? error.message : "Your channel could not be created. Please try again." }; }
+  revalidatePath("/", "layout");
   redirect(`/shows/${show.id}`);
 }
 
@@ -27,14 +31,12 @@ export async function updateShowAction(showId: string, formData: FormData) {
   revalidatePath("/studio");
 }
 
-export async function deleteShowAction(showId: string) {
+export async function deleteShowAction(showId: string, _: { error?: string }, formData: FormData): Promise<{ error?: string }> {
   await requireAdmin();
-  const show = await prisma.show.findUniqueOrThrow({ where: { id: showId }, select: { status: true } });
-  if (show.status === "LIVE") throw new Error("End the live show before deleting its running order.");
-  await prisma.show.delete({ where: { id: showId } });
-  revalidatePath("/shows");
-  revalidatePath("/studio");
-  redirect("/shows");
+  try { await deleteChannel(showId, String(formData.get("confirmation") ?? "")); }
+  catch (error) { return { error: error instanceof Error && !(error instanceof Prisma.PrismaClientKnownRequestError) ? error.message : "This channel changed. Refresh and try again." }; }
+  revalidatePath("/", "layout");
+  redirect(`/shows?deleted=${encodeURIComponent(showId)}`);
 }
 
 export async function resetShowForReplayAction(showId: string) {

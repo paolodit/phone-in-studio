@@ -12,10 +12,16 @@ import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provi
 import { FishAudioVoiceProvider } from "@/lib/voice/fish-audio-provider";
 import { GeminiLiveVoiceProvider } from "@/lib/voice/gemini-live-provider";
 import { listMicrophones, OpenAIWebRtcVoiceProvider } from "@/lib/voice/openai-webrtc-provider";
+import { OpenAILiveVoiceProvider } from "@/lib/voice/openai-live-provider";
+import { VoiceRouteOptions } from "@/components/VoiceRouteOptions";
+import { resolveOpenAILiveVoice } from "@/lib/openai-live-voices";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
 import { StudioRecorderPanel } from "@/components/StudioRecorderPanel";
 import { StudioOnAirTools } from "@/components/StudioOnAirTools";
-import { builtInCues, clampAudioVolume, StudioAudioDeck, type BuiltInCueId, type DeckState } from "@/lib/studio-audio";
+import { useVisualAutoplay } from "@/components/useVisualAutoplay";
+import { HostTurnScheduler } from "@/lib/host-turn-scheduler";
+import { playHostAudio } from "@/lib/host-audio";
+import { builtInCues, musicTracks, clampAudioVolume, StudioAudioDeck, type BuiltInCueId, type DeckState } from "@/lib/studio-audio";
 import { buildLiveDirectionInstructions, neutralLiveDirection, type LiveDirection } from "@/lib/live-direction";
 
 const text = (value: unknown) => typeof value === "string" ? value : "-";
@@ -32,7 +38,11 @@ const eventTime = (timestamp: string) => {
   return Number.isNaN(date.getTime()) ? "-" : `${date.toISOString().slice(11, 19)} UTC`;
 };
 
-export function StudioClient({
+export function StudioClient(props: Parameters<typeof StudioInstance>[0]) {
+  return <StudioInstance key={props.showId} {...props} />;
+}
+
+function StudioInstance({
   showId,
   initialSnapshot,
   initialStudioState,
@@ -44,6 +54,8 @@ export function StudioClient({
   initialVoiceProvider: VoiceProviderId;
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
+  const displayedSnapshot = useVisualAutoplay(snapshot);
+  const [visualSettingsBusy, setVisualSettingsBusy] = useState(false);
   const [studioState, setStudioState] = useState(initialStudioState);
   const [message, setMessage] = useState("Your show is synced. The main action follows the current state of the line.");
   const [voiceStatus, setVoiceStatus] = useState("No browser voice session");
@@ -63,9 +75,11 @@ export function StudioClient({
   const [busy, setBusy] = useState(false);
   const [musicState, setMusicState] = useState<DeckState>({ status: "idle" });
   const [cueState, setCueState] = useState<DeckState>({ status: "idle" });
-  const [musicVolume, setMusicVolume] = useState(0.18);
+  const [musicVolume, setMusicVolume] = useState(initialStudioState.backgroundMusic?.volume ?? 0.18);
+  const [musicEnabled, setMusicEnabled] = useState(initialStudioState.backgroundMusic?.enabled ?? false);
+  const [musicTrackId, setMusicTrackId] = useState(initialStudioState.backgroundMusic?.trackId ?? "late-night-radio");
   const [cueVolume, setCueVolume] = useState(0.7);
-  const [musicLoop, setMusicLoop] = useState(true);
+  const [musicLoop, setMusicLoop] = useState(initialStudioState.backgroundMusic?.loop ?? true);
   const [audioPreferencesReady, setAudioPreferencesReady] = useState(false);
   const musicDeckRef = useRef<StudioAudioDeck | null>(null);
   const cueDeckRef = useRef<StudioAudioDeck | null>(null);
@@ -79,8 +93,7 @@ export function StudioClient({
   const autoRunRef = useRef(false);
   const autoReplayRequestedRef = useRef(false);
   const autoTransitionRef = useRef(false);
-  const autoTurnTimerRef = useRef<number | null>(null);
-  const lastAutoCallerTurnRef = useRef("");
+  const hostSchedulerRef = useRef(new HostTurnScheduler());
   const autoVisualShownForCallerRef = useRef("");
   const hostTurnCountRef = useRef(0);
   const directionAppliedRef = useRef(false);
@@ -96,6 +109,8 @@ export function StudioClient({
         if (typeof saved.musicVolume === "number") setMusicVolume(clampAudioVolume(saved.musicVolume));
         if (typeof saved.cueVolume === "number") setCueVolume(clampAudioVolume(saved.cueVolume));
         if (typeof saved.musicLoop === "boolean") setMusicLoop(saved.musicLoop);
+        if (typeof saved.musicEnabled === "boolean") setMusicEnabled(saved.musicEnabled);
+        if (musicTracks.some((track) => track.id === saved.musicTrackId)) setMusicTrackId(saved.musicTrackId);
       }
     } catch { /* Playback remains usable without saved preferences. */ }
     setAudioPreferencesReady(true); cues.preload(builtInCues);
@@ -104,8 +119,14 @@ export function StudioClient({
   useEffect(() => {
     musicDeckRef.current?.setVolume(musicVolume); musicDeckRef.current?.setLoop(musicLoop); cueDeckRef.current?.setVolume(cueVolume);
     for (const effect of studioState.soundEffects) { const audio = soundRef.current.get(effect.id); if (audio) audio.volume = clampAudioVolume(effect.volume * cueVolume); }
-    if (audioPreferencesReady) { try { localStorage.setItem(`phone-in:studio-audio:${showId}`, JSON.stringify({ musicVolume, cueVolume, musicLoop })); } catch { /* Optional preference storage. */ } }
-  }, [musicVolume, cueVolume, musicLoop, audioPreferencesReady, showId, studioState.soundEffects]);
+    if (audioPreferencesReady) { try { localStorage.setItem(`phone-in:studio-audio:${showId}`, JSON.stringify({ musicVolume, cueVolume, musicLoop, musicEnabled, musicTrackId })); } catch { /* Optional preference storage. */ } }
+  }, [musicVolume, cueVolume, musicLoop, musicEnabled, musicTrackId, audioPreferencesReady, showId, studioState.soundEffects]);
+  const startDefaultMusic = useCallback(() => {
+    if (!musicEnabled || !audioPreferencesReady || musicState.status !== "idle") return;
+    const track = musicTracks.find((item) => item.id === musicTrackId);
+    if (track) void musicDeckRef.current?.play(track);
+  }, [musicEnabled, audioPreferencesReady, musicState.status, musicTrackId]);
+  const stopMusic = useCallback(() => { setMusicEnabled(false); musicDeckRef.current?.stop(); }, []);
   const playCue = useCallback((id: BuiltInCueId) => { const cue = builtInCues.find((item) => item.id === id); if (cue) void cueDeckRef.current?.play(cue); }, []);
   const stopEffects = useCallback(() => { cueDeckRef.current?.stop(); soundRef.current.forEach((audio) => { audio.pause(); audio.currentTime = 0; }); }, []);
   useEffect(() => { if (snapshot.broadcastState === "SHOW_ENDED") { musicDeckRef.current?.stop(); stopEffects(); } }, [snapshot.broadcastState, stopEffects]);
@@ -125,7 +146,7 @@ export function StudioClient({
   const callerWithheldDetail = text(caller?.story.hiddenTruth);
   const visualAssets = caller?.assets.filter((asset) => asset.type === "SUPPORTING_VISUAL") ?? [];
   const primaryAutoVisualId = visualAssets[0]?.id;
-  const voiceProviderLabel = voiceProvider === "gemini"
+  const voiceProviderLabel = voiceProvider === "openai-live" ? "GPT-Live-1" : voiceProvider === "gemini"
     ? "Gemini Live"
     : voiceProvider === "elevenlabs"
       ? "ElevenLabs Agent"
@@ -135,6 +156,7 @@ export function StudioClient({
 
   const refreshStudio = useCallback(async () => {
     const response = await fetch(`/api/shows/${showId}/studio-state`, { cache: "no-store" });
+    if (response.status === 404) { window.location.replace("/shows"); return; }
     if (response.ok) setStudioState(await response.json() as StudioState);
   }, [showId]);
 
@@ -147,7 +169,14 @@ export function StudioClient({
       void refreshStudio();
     };
     source.addEventListener("state", handleState);
-    source.onerror = () => setMessage("Display sync reconnecting...");
+    source.addEventListener("deleted", () => {
+      source.close(); autoRunRef.current = false; connectionAbortRef.current?.abort(); hostTurnAbortRef.current?.abort();
+      hostAudioRef.current?.pause(); musicDeckRef.current?.stop(); cueDeckRef.current?.stop();
+      soundRef.current.forEach((audio) => audio.pause()); window.speechSynthesis?.cancel();
+      void sessionRef.current?.endSession();
+      window.location.replace("/shows");
+    });
+    source.onerror = () => { setMessage("Display sync reconnecting..."); void refreshStudio(); };
     return () => {
       source.removeEventListener("state", handleState);
       source.close();
@@ -160,17 +189,21 @@ export function StudioClient({
     soundRef.current.forEach((audio) => audio.pause());
     window.speechSynthesis?.cancel();
     hostAudioRef.current?.pause();
-    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+    hostSchedulerRef.current.cancel();
     void sessionRef.current?.endSession();
   }, []);
 
   useEffect(() => { autoRunRef.current = autoRunActive; }, [autoRunActive]);
+  useEffect(() => {
+    if (!sessionConnected) return;
+    void sessionRef.current?.muteInput(autoRunActive || aiHostBusy || snapshot.broadcastState === "CALLER_ON_HOLD").catch(() => undefined);
+  }, [autoRunActive, aiHostBusy, sessionConnected, snapshot.broadcastState]);
 
   useEffect(() => {
     setLiveDirection({ ...neutralLiveDirection });
     directionAppliedRef.current = false;
     hostTurnCountRef.current = 0;
-    lastAutoCallerTurnRef.current = "";
+    hostSchedulerRef.current.reset();
     autoVisualShownForCallerRef.current = "";
     setTranscript([]);
   }, [caller?.id]);
@@ -245,6 +278,19 @@ export function StudioClient({
     try { await triggerVisual(assetId); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update the visual."); }
   }, [triggerVisual]);
 
+  const saveVisualAutoplay = useCallback(async (enabled: boolean, intervalSeconds: number) => {
+    setVisualSettingsBusy(true);
+    try {
+      const response = await fetch(`/api/shows/${showId}/visual-autoplay`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, intervalSeconds }) });
+      const result = await response.json() as BroadcastSnapshot & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Unable to save image autoplay.");
+      setSnapshot(result);
+      await refreshStudio();
+      setMessage(enabled ? `Image autoplay enabled for all callers · ${intervalSeconds} seconds per image.` : "Image autoplay paused. The current image stays on air.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save image autoplay."); }
+    finally { setVisualSettingsBusy(false); }
+  }, [showId, refreshStudio]);
+
   const connectRealtime = useCallback(async (updateBroadcastState: boolean) => {
     if (!caller) throw new Error("Cue a caller before connecting a voice session.");
     connectionAbortRef.current?.abort();
@@ -256,7 +302,7 @@ export function StudioClient({
     setReplyLatency(null);
     setCallerSpeaking(false);
     setVoiceStatus(`Connecting to ${voiceProviderLabel}…`);
-    const provider = voiceProvider === "gemini"
+    const provider = voiceProvider === "openai-live" ? new OpenAILiveVoiceProvider() : voiceProvider === "gemini"
       ? new GeminiLiveVoiceProvider()
       : voiceProvider === "elevenlabs"
         ? new ElevenLabsAgentVoiceProvider()
@@ -276,12 +322,13 @@ export function StudioClient({
       interruptionMode,
       onPlaybackChange: setCallerSpeaking,
       onReplyLatency: setReplyLatency,
-      onDisconnected: () => { setSessionConnected(false); setCallerSpeaking(false); },
+      onDisconnected: () => { setSessionConnected(false); setCallerSpeaking(false); autoRunRef.current = false; setAutoRunActive(false); setAiHostPaused(true); hostTurnAbortRef.current?.abort(); },
       onError: (error) => setMessage(error),
     });
     if (connectionAbort.signal.aborted) { await session.endSession(); throw new DOMException("Caller connection cancelled", "AbortError"); }
     sessionRef.current = session;
     setSessionConnected(true);
+    if (autoRunRef.current) await session.muteInput(true);
     await session.setOutputVolume(volume);
     if (snapshot.broadcastState === "CALLER_ON_HOLD") {
       await session.muteInput(true);
@@ -293,7 +340,7 @@ export function StudioClient({
     if (!inputDeviceId && devices[0]) setInputDeviceId(devices[0].id);
     if (updateBroadcastState) await postControl("MOCK_CONNECT");
     setMessage(updateBroadcastState
-      ? `${voiceProviderLabel} caller connected. The caller will open the conversation, then respond after each host turn.`
+      ? voiceProvider === "openai-live" ? "GPT-Live caller connected. The caller will open naturally and can listen while speaking." : `${voiceProviderLabel} caller connected. The caller will open the conversation, then respond after each host turn.`
       : "Caller browser audio reconnected. Resume the call when you are ready to put them on air.");
   }, [caller, inputDeviceId, interruptionMode, persistTranscript, postControl, reportLevels, showId, snapshot.broadcastState, voiceProvider, voiceProviderLabel, volume]);
 
@@ -339,6 +386,7 @@ export function StudioClient({
   const control = useCallback(async (action: StudioControlAction) => {
     setBusy(true);
     try {
+      if (["START_SHOW", "ANSWER_CALL"].includes(action)) startDefaultMusic();
       if (["EMERGENCY_STOP", "END_SHOW"].includes(action)) {
         setRecordingStopSignal((value) => value + 1);
         autoRunRef.current = false;
@@ -348,7 +396,7 @@ export function StudioClient({
         cueDeckRef.current?.stop();
         musicDeckRef.current?.stop();
         window.speechSynthesis?.cancel();
-        if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+        hostSchedulerRef.current.cancel();
       }
       if (action === "INTERRUPT_CALLER") {
         hostTurnAbortRef.current?.abort();
@@ -356,7 +404,8 @@ export function StudioClient({
         autoRunRef.current = false;
         setAutoRunActive(false);
         setAiHostPaused(true);
-        if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+        hostSchedulerRef.current.cancel();
+        await sessionRef.current?.muteInput(false);
         await sessionRef.current?.interrupt();
       }
       if (action === "MUTE_CALLER") {
@@ -384,9 +433,6 @@ export function StudioClient({
       }
       if (action === "END_CALL") playCue("hostHangup");
       if (action === "CALLER_HANGS_UP") playCue("callerHangup");
-      if (["END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action) && studioState.aiHost?.visualPolicy === "AUTO_SHOW") {
-        await triggerVisual(null).catch(() => undefined);
-      }
       if (["END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action)) await endBrowserAudio();
 
       await postControl(action);
@@ -403,6 +449,9 @@ export function StudioClient({
         try {
           await connectRealtime(true);
         } catch (error) {
+          autoRunRef.current = false;
+          setAutoRunActive(false);
+          setAiHostPaused(true);
           setVoiceStatus("AI caller not connected");
           setMessage(error instanceof Error ? `${error.message} The caller is still waiting; use Connect AI caller to retry or Use mock caller to continue the run.` : "The caller is still waiting. Use Connect AI caller to retry or Use mock caller to continue the run.");
         }
@@ -419,10 +468,11 @@ export function StudioClient({
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Control action failed.");
+      if (autoRunRef.current) { autoRunRef.current = false; setAutoRunActive(false); setAiHostPaused(true); }
     } finally {
       setBusy(false);
     }
-  }, [connectRealtime, endBrowserAudio, playMockCaller, playCue, postControl, studioState.aiHost?.visualPolicy, triggerVisual]);
+  }, [connectRealtime, endBrowserAudio, playMockCaller, playCue, postControl, startDefaultMusic]);
 
   const connectAiCaller = useCallback(async () => {
     setBusy(true);
@@ -442,43 +492,32 @@ export function StudioClient({
       setMessage("Connect the caller before asking the AI Host to take a turn.");
       return false;
     }
-    hostTurnAbortRef.current?.abort();
+    if (hostTurnAbortRef.current) return false;
     const abort = new AbortController();
     hostTurnAbortRef.current = abort;
     const activeSession = sessionRef.current;
     setAiHostBusy(true);
     setAiHostPaused(false);
     try {
-      await sessionRef.current.interrupt();
+      await activeSession.muteInput(true);
+      await activeSession.interrupt();
       setVoiceStatus(`${profile.name} is preparing a response…`);
       const response = await fetch("/api/ai-host/respond", { method: "POST", signal: abort.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ showId, callerId: caller.id, transcript, intent }) });
       const result = await response.json() as { text?: string; profileId?: string; error?: string };
       if (!response.ok || !result.text || !result.profileId) throw new Error(result.error ?? "The AI Host could not prepare its next line.");
-      await sessionRef.current.muteInput(true);
       const speech = await fetch("/api/ai-host/speech", { method: "POST", signal: abort.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: result.profileId, text: result.text }) });
       if (!speech.ok) throw new Error((await speech.json() as { error?: string }).error ?? "The AI Host voice could not play.");
-      const objectUrl = URL.createObjectURL(await speech.blob());
-      if (abort.signal.aborted) { URL.revokeObjectURL(objectUrl); abort.signal.throwIfAborted(); }
-      const audio = new Audio(objectUrl);
-      hostAudioRef.current = audio;
+      const blob = await speech.blob();
+      abort.signal.throwIfAborted();
       setVoiceStatus(`${profile.name} speaking`);
-      persistTranscript({ speaker: "HOST", text: result.text });
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const onAbort = () => { audio.pause(); reject(new DOMException("AI host stopped", "AbortError")); };
-          const cleanup = () => abort.signal.removeEventListener("abort", onAbort);
-          audio.onended = () => { cleanup(); resolve(); };
-          audio.onerror = () => { cleanup(); reject(new Error("The browser could not play the AI Host voice.")); };
-          abort.signal.addEventListener("abort", onAbort, { once: true });
-          void audio.play().catch((error) => { cleanup(); reject(error); });
-        });
-      } finally { URL.revokeObjectURL(objectUrl); }
+      await playHostAudio(blob, abort.signal, (audio) => { hostAudioRef.current = audio; });
       abort.signal.throwIfAborted();
       if (sessionRef.current !== activeSession) return false;
-      await activeSession.muteInput(false);
+      persistTranscript({ speaker: "HOST", text: result.text });
+      await activeSession.muteInput(autoRunRef.current);
       if (intent === "respond") {
         hostTurnCountRef.current += 1;
-        await sessionRef.current.sendHostText(result.text);
+        await activeSession.sendHostText(result.text);
         setVoiceStatus("Waiting for caller reply");
         setMessage(`${profile.name} completed the host turn. The caller now has the exact spoken line as its prompt.`);
       } else {
@@ -506,7 +545,7 @@ export function StudioClient({
     autoReplayRequestedRef.current = false;
     setAutoRunActive(false);
     hostAudioRef.current?.pause();
-    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
+    hostSchedulerRef.current.cancel();
     void sessionRef.current?.muteInput(false);
     setAiHostPaused(true);
     setMessage("AI Host paused. Continue through the host microphone whenever you are ready.");
@@ -650,7 +689,7 @@ export function StudioClient({
     && studioState.queue.some((item) => ["COMPLETED", "SKIPPED", "FAILED"].includes(item.status))
     && ["SHOW_IDLE", "CALLER_ENDED", "SHOW_BREAK", "SHOW_ENDED"].includes(broadcastState);
   const canConnectAi = !sessionConnected && ["CALLER_CONNECTING", "CALLER_LIVE", "CALLER_ON_HOLD"].includes(broadcastState);
-  const connectButtonLabel = `Connect ${voiceProvider === "gemini" ? "Gemini" : voiceProvider === "elevenlabs" ? "ElevenLabs" : voiceProvider === "fish" ? "Fish" : "OpenAI"} caller`;
+  const connectButtonLabel = `Connect ${voiceProvider === "openai-live" ? "GPT-Live" : voiceProvider === "gemini" ? "Gemini" : voiceProvider === "elevenlabs" ? "ElevenLabs" : voiceProvider === "fish" ? "Fish" : "OpenAI"} caller`;
   const stateLabel = broadcastState.replaceAll("_", " ");
   const nextStep = canStart
     ? "Start the show to open the line."
@@ -698,6 +737,13 @@ export function StudioClient({
           await control("START_SHOW");
         } else if (canCueNext) {
           await control("CUE_NEXT");
+        } else if (broadcastState === "CALLER_CONNECTING" && !sessionConnected) {
+          await connectRealtime(true);
+        } else if (callerIsLive && !sessionConnected) {
+          await connectRealtime(false);
+        } else if (callerIsHeld) {
+          if (!sessionConnected) await connectRealtime(false);
+          if (autoRunRef.current) await control("RESUME_CALLER");
         } else if (canAnswer) {
           setMessage(`Auto-run is bringing ${caller?.name ?? "the caller"} on air…`);
           await new Promise((resolve) => window.setTimeout(resolve, studioState.aiHost?.betweenCallsSeconds ? studioState.aiHost.betweenCallsSeconds * 1_000 : 3_000));
@@ -718,34 +764,32 @@ export function StudioClient({
       }
     };
     void runTransition();
-  }, [aiHostBusy, autoRunActive, broadcastState, busy, caller?.name, canAnswer, canCueNext, canReplayQueue, canStart, control, hasQueuedCaller, replayQueue, showIsLive, studioState.aiHost?.betweenCallsSeconds]);
+  }, [aiHostBusy, autoRunActive, broadcastState, busy, caller?.name, callerIsHeld, callerIsLive, canAnswer, canCueNext, canReplayQueue, canStart, connectRealtime, control, hasQueuedCaller, replayQueue, sessionConnected, showIsLive, studioState.aiHost?.betweenCallsSeconds]);
 
   useEffect(() => {
     const lastEntry = transcript.at(-1);
-    if (!autoRunActive || aiHostBusy || busy || callerSpeaking || !callerIsLive || !sessionConnected || lastEntry?.speaker !== "CALLER") return;
+    if (!autoRunActive || aiHostBusy || busy || callerSpeaking || !callerIsLive || !sessionConnected || lastEntry?.speaker !== "CALLER") { hostSchedulerRef.current.cancel(); return; }
     const callerTurnNumber = transcript.filter((entry) => entry.speaker === "CALLER").length;
     const turnKey = `${caller?.id ?? "none"}:${callerTurnNumber}:${lastEntry.text}`;
-    if (lastAutoCallerTurnRef.current === turnKey) return;
-    lastAutoCallerTurnRef.current = turnKey;
-    if (studioState.aiHost?.visualPolicy === "AUTO_SHOW" && primaryAutoVisualId && autoVisualShownForCallerRef.current !== caller?.id) {
+    if (!studioState.visualAutoplay?.enabled && studioState.aiHost?.visualPolicy === "AUTO_SHOW" && primaryAutoVisualId && autoVisualShownForCallerRef.current !== caller?.id) {
       autoVisualShownForCallerRef.current = caller?.id ?? "";
       void triggerVisual(primaryAutoVisualId).catch((error: unknown) => {
         setMessage(error instanceof Error ? `${error.message} The call is continuing with the caller portrait.` : "The topic visual could not be shown. The call is continuing with the caller portrait.");
       });
     }
-    if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
-    autoTurnTimerRef.current = window.setTimeout(() => {
+    hostSchedulerRef.current.schedule(turnKey, () => {
       void (async () => {
         if (!autoRunRef.current) return;
         const shouldClose = hostTurnCountRef.current >= (studioState.aiHost?.maxTurnsPerCaller ?? 4);
         const completed = await runAiHostTurn(shouldClose ? "close" : "respond");
         if (completed && shouldClose && autoRunRef.current) await control("END_CALL");
       })();
-    }, 900);
-    return () => {
-      if (autoTurnTimerRef.current) window.clearTimeout(autoTurnTimerRef.current);
-    };
-  }, [aiHostBusy, autoRunActive, busy, callerSpeaking, caller?.id, callerIsLive, control, primaryAutoVisualId, runAiHostTurn, sessionConnected, studioState.aiHost?.maxTurnsPerCaller, studioState.aiHost?.visualPolicy, transcript, triggerVisual]);
+    });
+  }, [aiHostBusy, autoRunActive, busy, callerSpeaking, caller?.id, callerIsLive, control, primaryAutoVisualId, runAiHostTurn, sessionConnected, studioState.aiHost?.maxTurnsPerCaller, studioState.aiHost?.visualPolicy, studioState.visualAutoplay?.enabled, transcript, triggerVisual]);
+
+  useEffect(() => {
+    if (autoRunActive && (!studioState.aiHost?.enabled || studioState.aiHost.mode !== "AI_AUTONOMOUS")) takeOverFromAi();
+  }, [autoRunActive, studioState.aiHost?.enabled, studioState.aiHost?.mode, takeOverFromAi]);
 
   return <div className="space-y-4">
     <section className="live-transport" aria-label="Live controls">
@@ -796,15 +840,19 @@ export function StudioClient({
 
       <div className="panel panel-pad">
         <p className="eyebrow">Voice & direction</p>
+        {studioState.aiHost?.available && (!studioState.aiHost.enabled || studioState.aiHost.mode === "HUMAN") && <div className="mt-4 rounded-xl border border-violet-300/20 bg-violet-300/5 p-4"><p className="text-sm font-bold text-white">AI presenter is available</p><p className="mt-1 text-xs leading-5 text-slate-400">This show is currently human-hosted. Choose a presenter and an AI hosting mode to use it here.</p><Link className="button-secondary mt-3" href={`/shows/${showId}?section=options#show-options`}><Bot className="h-4 w-4" />Set up AI Host</Link></div>}
         {studioState.aiHost?.enabled && studioState.aiHost.mode !== "HUMAN" && studioState.aiHost.profile && <div className="mt-4 rounded-xl border border-violet-300/25 bg-violet-300/5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Bot className="h-5 w-5 text-violet-200" /><div><p className="label">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? "AI Host · auto-run" : "Supervised AI Host"}</p><p className="mt-1 text-sm font-bold text-white">{studioState.aiHost.profile.name} <span className="font-normal text-slate-400">· {studioState.aiHost.profile.stylePreset}</span></p></div></div><span className={`status ${autoRunActive ? "bg-emerald-300/10 text-emerald-100" : aiHostPaused ? "bg-amber-300/10 text-amber-100" : "bg-violet-300/10 text-violet-100"}`}>{autoRunActive ? "AUTO-RUN ACTIVE" : aiHostPaused ? "HUMAN TAKEOVER" : "READY"}</span></div>
           <p className="mt-3 text-xs leading-5 text-slate-400">{studioState.aiHost.mode === "AI_AUTONOMOUS" ? `Auto-run answers queued callers, responds after each completed caller turn, closes after ${studioState.aiHost.maxTurnsPerCaller} presenter turns and waits ${studioState.aiHost.betweenCallsSeconds} seconds before the next call. ${studioState.aiHost.visualPolicy === "AUTO_SHOW" ? "The primary credited topic image appears after the caller opens." : studioState.aiHost.visualPolicy === "PREPARE" ? "Prepared topic images remain under manual host control." : "The output stays on the caller portrait."} It never arms itself on page load.` : "Each press creates one short presenter response, speaks it, then passes the exact line to the caller without feeding speaker audio back through the microphone."}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {studioState.aiHost.mode === "AI_AUTONOMOUS" && <button type="button" className={autoRunActive ? "button-secondary" : "button-primary"} disabled={aiHostBusy || busy || (!hasQueuedCaller && !callerCanEnd && !canReplayQueue)} onClick={() => { if (autoRunActive) { takeOverFromAi(); } else { setAiHostPaused(false); autoReplayRequestedRef.current = canReplayQueue; autoRunRef.current = true; setAutoRunActive(true); setMessage("AI Host auto-run armed. Queue and call transitions remain visible and Emergency Stop stays available."); } }}><Bot className="h-4 w-4" /> {autoRunActive ? "Pause auto-run" : "Start auto-run"}</button>}
+            <Link className="button-secondary" href={`/settings/modules/ai-host?profile=${studioState.aiHost.profile.id}`}>Test presenter privately</Link>
+            {studioState.aiHost.mode === "AI_AUTONOMOUS" && <button type="button" className={autoRunActive ? "button-secondary" : "button-primary"} disabled={aiHostBusy || busy || (!hasQueuedCaller && !callerCanEnd && !canReplayQueue)} onClick={() => { if (autoRunActive) { takeOverFromAi(); } else { startDefaultMusic(); setAiHostPaused(false); autoReplayRequestedRef.current = canReplayQueue; autoRunRef.current = true; setAutoRunActive(true); setMessage("AI Host auto-run armed. Queue and call transitions remain visible and Emergency Stop stays available."); } }}><Bot className="h-4 w-4" /> {autoRunActive ? "Pause auto-run" : "Start auto-run"}</button>}
             <button type="button" className={studioState.aiHost.mode === "AI_AUTONOMOUS" ? "button-secondary" : "button-primary"} disabled={!callerIsLive || !sessionConnected || aiHostBusy || busy || autoRunActive} onClick={() => void runAiHostTurn()}><Bot className="h-4 w-4" /> {aiHostBusy ? "Preparing host turn…" : "AI host: one turn"}</button>
             <button type="button" className="button-secondary" onClick={takeOverFromAi}><Mic2 className="h-4 w-4" /> Take over</button>
             <button type="button" className="button-secondary" disabled={aiHostBusy || aiHostPaused || autoRunActive} onClick={() => setAiHostPaused(true)}><PauseCircle className="h-4 w-4" /> Pause AI host</button>
           </div>
+          {(!callerIsLive || !sessionConnected) && <p className="mt-3 text-xs text-violet-200">For one-turn hosting, answer and connect a caller using the main control above first. Auto-run can bring queued callers on air for you.</p>}
+          {studioState.aiHost.configured === false && <p role="alert" className="mt-3 text-xs text-amber-200">AI Host needs OPENAI_API_KEY on the server. Add it and restart before starting a presenter.</p>}
         </div>}
         {caller && sessionConnected && <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="label">Live caller direction</p><p className="mt-1 text-xs text-slate-400">Temporary nudges from the caller's authored baseline. Changes apply to the next reply.</p></div><button type="button" className="text-xs font-bold text-cyan-200 hover:text-white" onClick={() => setLiveDirection({ ...neutralLiveDirection })}>Reset</button></div>
@@ -821,7 +869,8 @@ export function StudioClient({
           <div>
             <p className="label">Voice session</p>
             <p className="mt-1 text-sm text-cyan-200">{voiceStatus}</p>
-            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+            <label className="mt-3 block"><span className="label">Caller route</span><select className="field !mt-1" value={voiceProvider} onChange={(event) => setVoiceProvider(event.target.value as VoiceProviderId)} disabled={sessionConnected || busy}><VoiceRouteOptions /></select></label>
+            {voiceProvider === "openai-live" && <p className="mt-2 text-xs leading-5 text-slate-400">GPT-Live listens while speaking. Brief acknowledgements should not take the floor; say a clear interruption or use Space. {caller && <>Voice: <b className="text-cyan-200">{resolveOpenAILiveVoice(caller.performance)}</b>. Cast another voice in the caller editor or audition it in a private soundcheck. </>}Connected time is billed, including silence and hold; End call releases the session.</p>}
             {voiceProvider === "fish" && <p className="mt-2 text-xs leading-5 text-slate-400">Fish is a voice-quality comparison route, not a duplex conversational model. It waits for a complete host sentence, transcribes it, prepares the caller reply, then renders Fish speech. Use <b>Interrupt</b> to stop playback deliberately.</p>}
             <p className="mt-2 text-xs text-amber-200">Use headphones to avoid feedback. Chrome / Edge on localhost or HTTPS is required for microphone access.</p>
             {voiceProvider === "openai" && <label className="mt-3 block"><span className="label">Interruption style</span><select className="field" value={interruptionMode} onChange={(event) => { const mode = event.target.value as "guarded" | "manual"; setInterruptionMode(mode); sessionRef.current?.setInterruptionMode?.(mode); }}><option value="guarded">Guarded · meaningful words take the floor</option><option value="manual">Manual · Space to interrupt</option></select><span className="mt-2 block text-xs leading-5 text-slate-400">Guarded mode ignores short overlapping “uh-huhs” and acknowledgements. A clear phrase or “wait” interrupts. English transcript-based; Space always works.</span></label>}
@@ -845,11 +894,12 @@ export function StudioClient({
     <aside className="space-y-5">
       <div className="panel panel-pad"><div className="flex items-center justify-between gap-3"><p className="eyebrow">Up next</p><Link className="text-xs font-bold text-cyan-200" href={`/callers?show=${showId}`}>+ Add callers</Link></div><QueueOrderEditor showId={showId} items={studioState.queue} onReordered={refreshStudio} refreshOnReorder={false} /></div>
       <StudioRecorderPanel showId={showId} title={snapshot.title} callerName={caller?.name} inputDeviceId={inputDeviceId || undefined} transcript={transcript} stopSignal={recordingStopSignal} showEnded={broadcastState === "SHOW_ENDED"} />
-      <StudioOnAirTools visuals={visualAssets} activeVisualUrl={snapshot.caller?.visual?.url} onVisual={(id) => void showVisual(id)}
+      <StudioOnAirTools visuals={visualAssets} activeVisualUrl={displayedSnapshot.caller?.visual?.url} onVisual={(id) => void showVisual(id)} autoplay={studioState.visualAutoplay ?? { enabled: false, intervalSeconds: 10 }} autoplayBusy={visualSettingsBusy} onAutoplay={(enabled, seconds) => void saveVisualAutoplay(enabled, seconds)}
         sounds={studioState.soundEffects} onSound={(effect) => void playSound(effect)} onStopSound={stopSound}
         onCue={playCue} onStopEffects={stopEffects} cueState={cueState} cueVolume={cueVolume} onCueVolume={setCueVolume}
         musicState={musicState} musicVolume={musicVolume} musicLoop={musicLoop}
-        onMusic={(track) => void musicDeckRef.current?.play(track)} onStopMusic={() => musicDeckRef.current?.stop()}
+        musicEnabled={musicEnabled} onMusicEnabled={(enabled) => { setMusicEnabled(enabled); if (!enabled) musicDeckRef.current?.stop(); }}
+        onMusic={(track) => { setMusicEnabled(true); setMusicTrackId(track.id); void musicDeckRef.current?.play(track); }} onStopMusic={stopMusic}
         onMusicVolume={setMusicVolume} onMusicLoop={setMusicLoop} />
       <div className="panel panel-pad"><p className="eyebrow">Live transcript</p><div className="mt-3 max-h-48 space-y-2 overflow-auto text-xs">{transcript.length ? transcript.map((entry, index) => <p key={`${entry.speaker}-${index}`}><b className="text-cyan-300">{entry.speaker === "HOST" ? "HOST" : "CALLER"}</b> <span className="text-slate-200">{entry.text}</span></p>) : <p className="text-slate-400">Transcript events will appear and persist here during a Realtime call.</p>}</div></div>
       <details className="panel panel-pad"><summary className="eyebrow cursor-pointer">Event log</summary><div className="mt-3 max-h-40 space-y-2 overflow-auto text-xs">{studioState.events.map((event, index) => <div className="flex justify-between gap-3 border-b border-slate-800 pb-2" key={`${event.timestamp}-${index}`}><span className="text-slate-200">{event.type.replaceAll("_", " ")}</span><time className="shrink-0 text-slate-500">{eventTime(event.timestamp)}</time></div>)}</div></details>

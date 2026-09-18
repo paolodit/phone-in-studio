@@ -35,7 +35,8 @@ if (mode === "migrate") {
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-show-planner.ts"]));
 } else if (mode === "init") {
   await waitFor(startNode([path.join(root, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"]));
-  await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "prisma/seed.ts"]));
+  // A fresh install enters channel creation. Never overwrite existing user data
+  // or silently create a development show during normal installation.
 } else if (mode === "verify") {
   await waitFor(startNode([path.join(root, "node_modules", "tsx", "dist", "cli.mjs"), "scripts/verify-local-flow.ts"]));
 } else if (mode === "realtime") {

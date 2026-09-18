@@ -6,6 +6,7 @@ import { publishShowUpdate } from "@/lib/events";
 import { publicCallerFromSnapshot, type BroadcastSnapshot } from "@/lib/public-show";
 import { transitionShow } from "@/lib/show-state";
 import type { StudioControlAction } from "@/lib/schemas";
+import { currentPlaylistVisual, readVisualAutoplay, visualPlaylistIndex, type VisualPlaylist } from "@/lib/visual-autoplay";
 
 export async function getBroadcastSnapshot(showId: string): Promise<BroadcastSnapshot> {
   const show = await prisma.show.findUniqueOrThrow({
@@ -17,22 +18,38 @@ export async function getBroadcastSnapshot(showId: string): Promise<BroadcastSna
       updatedAt: true,
       currentQueueItemId: true,
       currentVisualAssetId: true,
+      brandingConfig: true,
     },
   });
 
   const current = show.currentQueueItemId
     ? await prisma.queueItem.findUnique({
         where: { id: show.currentQueueItemId },
-        select: { callerSnapshot: true },
+        select: { callerSnapshot: true, startedAt: true },
       })
     : null;
 
+  const caller = current ? publicCallerFromSnapshot(current.callerSnapshot, show.currentVisualAssetId) : null;
+  const autoplay = readVisualAutoplay(show.brandingConfig);
+  let visualPlaylist: VisualPlaylist | undefined;
+  if (autoplay.enabled && current && show.broadcastState === "CALLER_LIVE") {
+    const assets = callerSnapshotSchema.parse(current.callerSnapshot).assets.filter((asset) => asset.type === "SUPPORTING_VISUAL");
+    if (assets.length) visualPlaylist = {
+      // Explicit public allow-list: never serialize caller prompts or notes.
+      visuals: assets.map((asset) => ({ label: asset.label, url: asset.url, ...(asset.creditText ? { creditText: asset.creditText } : {}), ...(asset.creditUrl ? { creditUrl: asset.creditUrl } : {}) })),
+      intervalSeconds: autoplay.intervalSeconds,
+      startedAt: Math.max(autoplay.startedAt, current.startedAt?.getTime() ?? 0),
+      startIndex: Math.max(0, assets.findIndex((asset) => asset.id === show.currentVisualAssetId)),
+    };
+    if (caller && visualPlaylist) caller.visual = currentPlaylistVisual(visualPlaylist, Date.now());
+  }
   return {
     showId: show.id,
     title: show.title,
     broadcastState: show.broadcastState,
     updatedAt: show.updatedAt.toISOString(),
-    caller: current ? publicCallerFromSnapshot(current.callerSnapshot, show.currentVisualAssetId) : null,
+    caller,
+    ...(visualPlaylist ? { visualPlaylist } : {}),
   };
 }
 
@@ -63,6 +80,14 @@ export async function applyShowControl(showId: string, action: StudioControlActi
       Boolean(next),
     );
 
+    const autoplay = readVisualAutoplay(show.brandingConfig);
+    let heldVisualId = show.currentVisualAssetId;
+    if (action === "HOLD_CALLER" && autoplay.enabled && current) {
+      const assets = callerSnapshotSchema.parse(current.callerSnapshot).assets.filter((asset) => asset.type === "SUPPORTING_VISUAL");
+      const index = visualPlaylistIndex({ visuals: assets, intervalSeconds: autoplay.intervalSeconds, startedAt: Math.max(autoplay.startedAt, current.startedAt?.getTime() ?? 0), startIndex: Math.max(0, assets.findIndex((asset) => asset.id === heldVisualId)) }, Date.now());
+      heldVisualId = assets[index]?.id ?? null;
+    }
+
     let currentQueueItemId = show.currentQueueItemId;
     const now = new Date();
 
@@ -89,6 +114,9 @@ export async function applyShowControl(showId: string, action: StudioControlActi
         status: transition.showStatus,
         broadcastState: transition.broadcastState,
         currentQueueItemId,
+        ...(action === "HOLD_CALLER" ? { currentVisualAssetId: heldVisualId } : {}),
+        ...(action === "RESUME_CALLER" && autoplay.enabled ? { brandingConfig: { ...(show.brandingConfig as Prisma.JsonObject), visualAutoplay: { ...autoplay, startedAt: Date.now() } } } : {}),
+        ...(["CUE_NEXT", "END_CALL", "CALLER_HANGS_UP", "SKIP_CALLER", "EMERGENCY_STOP", "END_SHOW"].includes(action) ? { currentVisualAssetId: null } : {}),
         ...(action === "START_SHOW" ? { startedAt: now } : {}),
         ...(action === "END_SHOW" ? { endedAt: now } : {}),
       },
@@ -269,7 +297,12 @@ export async function applyBroadcastVisual(showId: string, assetId: string | nul
         });
       }
     }
-    await tx.show.update({ where: { id: showId }, data: { currentVisualAssetId: assetId } });
+    const autoplay = readVisualAutoplay(show.brandingConfig);
+    await tx.show.update({ where: { id: showId }, data: {
+      currentVisualAssetId: assetId,
+      // A manual image restarts its dwell time; Clear also stops the slideshow.
+      brandingConfig: { ...(show.brandingConfig as Prisma.JsonObject), visualAutoplay: { ...autoplay, enabled: assetId ? autoplay.enabled : false, startedAt: Date.now() } },
+    } });
     await tx.showEvent.create({
       data: {
         showId,
@@ -277,6 +310,25 @@ export async function applyBroadcastVisual(showId: string, assetId: string | nul
         payload: (assetId ? { assetId } : { reason: "host_clear" }) as Prisma.InputJsonValue,
       },
     });
+  });
+  const snapshot = await getBroadcastSnapshot(showId);
+  publishShowUpdate(showId, snapshot);
+  return snapshot;
+}
+
+export async function updateVisualAutoplay(showId: string, enabled: boolean, intervalSeconds: number) {
+  const now = Date.now();
+  await prisma.$transaction(async (tx) => {
+    const show = await tx.show.findUniqueOrThrow({ where: { id: showId } });
+    const settings = readVisualAutoplay(show.brandingConfig);
+    const current = show.currentQueueItemId ? await tx.queueItem.findUnique({ where: { id: show.currentQueueItemId } }) : null;
+    let assetId = show.currentVisualAssetId;
+    if (current && settings.enabled && show.broadcastState === "CALLER_LIVE") {
+      const assets = callerSnapshotSchema.parse(current.callerSnapshot).assets.filter((asset) => asset.type === "SUPPORTING_VISUAL");
+      const index = visualPlaylistIndex({ visuals: assets, intervalSeconds: settings.intervalSeconds, startedAt: Math.max(settings.startedAt, current.startedAt?.getTime() ?? 0), startIndex: Math.max(0, assets.findIndex((asset) => asset.id === assetId)) }, now);
+      assetId = assets[index]?.id ?? null;
+    }
+    await tx.show.update({ where: { id: showId }, data: { currentVisualAssetId: assetId, brandingConfig: { ...(show.brandingConfig as Prisma.JsonObject), visualAutoplay: { enabled, intervalSeconds, startedAt: now } } } });
   });
   const snapshot = await getBroadcastSnapshot(showId);
   publishShowUpdate(showId, snapshot);

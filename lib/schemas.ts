@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isOpenAILiveVoice } from "@/lib/openai-live-voices";
 
 const optionalText = z.string().trim().optional().transform((value) => value || undefined);
 
@@ -22,6 +23,7 @@ export const callerFormSchema = z.object({
   topicTags: z.string().trim().max(320).optional().default(""),
   voicePresentation: z.enum(["any", "feminine", "masculine", "neutral"]).optional(),
   voiceId: z.string().trim().min(1).max(120).optional().default("marin"),
+  openaiLiveVoiceId: z.string().trim().refine((value) => !value || isOpenAILiveVoice(value), "Choose a supported GPT-Live voice.").optional(),
   elevenLabsVoiceId: optionalText,
   fishAudioVoiceId: optionalText,
   pacing: z.enum(["Measured", "Conversational", "Brisk", "Animated"]).optional(),
@@ -164,7 +166,7 @@ export const showSetupSchema = z.object({
   title: z.string().trim().min(3).max(120),
   formatId: z.enum(["general", "advice", "discussion", "stories", "sports", "competition", "entertainment"]),
   formatGuidance: z.string().trim().max(1_500).optional().transform((value) => value || undefined),
-  voiceProvider: z.enum(["openai", "gemini", "elevenlabs", "fish"]),
+  voiceProvider: z.enum(["openai", "openai-live", "gemini", "elevenlabs", "fish"]),
 });
 
 export const optionalModuleKeySchema = z.enum(["AI_HOST", "CALLER_FACTORY"]);
@@ -241,6 +243,13 @@ export const fishSpeechSchema = realtimeSessionRequestSchema.extend({
 export const realtimeCallRequestSchema = realtimeSessionRequestSchema.extend({
   sdp: z.string().min(1).max(1_000_000),
 });
+
+export const openaiLiveCallRequestSchema = realtimeSessionRequestSchema.extend({
+  // SDP is protocol data, not display text. Trimming its final CRLF makes
+  // OpenAI's WebRTC parser reject an otherwise valid offer with an EOF error.
+  sdp: z.string().min(1).max(65_536).refine((value) => value.trim().length > 0, "SDP offer must not be blank."),
+  previewVoice: z.string().refine(isOpenAILiveVoice).optional(),
+}).refine((input) => !input.previewVoice || input.testMode, "Voice auditions are private-test only.");
 
 export const transcriptEntrySchema = z.object({
   speaker: z.enum(["HOST", "CALLER", "SYSTEM"]),
