@@ -182,12 +182,18 @@ Restart `npm run dev` after changing environment variables.
 On a fresh installation, login opens **Create your first channel**. **Shows → New channel** and the sidebar’s plus button open the same flow for subsequent channels. A channel remains the existing Show workspace internally—there is no separate scheduling or broadcast engine.
 
 1. **Give Me the Keys** keeps the existing blank-show setup and the “Make tonight’s show” planner.
-2. **I’ll Take the Mic** is selected by default. Its menu contains **Am I the A\*\*hole?**, **Who Booked These Guests?** and **Bad Joke Hotline**, each designed for six independent curated guests.
+2. **I’ll Take the Mic** is selected by default. Choose **Am I the A\*\*hole?**, **Who Booked These Guests?** or **Bad Joke Hotline**—each has six ready-to-use, independent guests with distinct personalities, voices, stories and host prompts. Preview the channel artwork and meet the cast before creating it.
 3. **Auto-run the Show** has one preset for an AI presenter and five independent guests. Creation opts into AI Host but does not arm auto-run or start voice billing.
 
-**Editorial status:** the final human casts, and the auto-run theme/presenter/cast, are awaiting confirmation. The cards are visible but cannot be created until their definitions are complete. No unrelated demo characters are silently substituted. The custom route works now. See [starter-pack authoring](docs/STARTER-PACKS.md) to finish or extend the catalogue.
+**Editorial status:** all three human-hosted packs are available (18 original guest cards). The auto-run theme, presenter and cast remain unconfirmed, so only that preset stays unavailable. See [the casts and starter-pack authoring guide](docs/STARTER-PACKS.md) to edit or extend the catalogue.
 
 Published packs are copied into ordinary, editable shows, callers, assets and (for auto-run) presenter profiles. Future template changes do not overwrite those copies. Music defaults on at a quiet level and starts with Start/Answer or an explicit auto-run start—not on page load. Studio’s Music tab retains track choice, volume, repeat and Stop, with an on/off preference saved per channel in this browser. Image autoplay defaults on for every caller and stays adjustable in Visuals. Pack creation prepares credited images from the existing Pexels/Pixabay integration, or uses explicitly curated existing images; missing stock credentials/results keep the portrait and produce a visible warning.
+
+### Give your channel a look
+
+Open a channel and expand **Channel artwork**. Generate an instant typographic graphic from its name, choose colours and fonts, edit its show label and tagline, or upload your own PNG, JPEG or WebP. **Save artwork** applies it to the channel card, sidebar, Studio and broadcast. The full broadcast displays the graphic between calls; a compact mark stays in the header during calls and in overlay output. This generator is local and free, not an AI-image API call.
+
+Uploads must be under 5 MB and 20 megapixels and suitable for public broadcast. The server strips metadata and stores optimised WebP files in the ignored `data/show-artwork/` directory. Back it up alongside your database; container deployments need persistent storage for it. Replaced files are retained rather than automatically deleted. [Artwork, storage and portrait credits](docs/STARTER-PACKS.md#channel-artwork).
 
 ### Deleting a channel
 

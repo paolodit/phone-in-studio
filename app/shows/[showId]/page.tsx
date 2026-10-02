@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DeleteChannelDialog } from "@/components/DeleteChannelDialog";
+import { ChannelIdentityEditor } from "@/components/ChannelIdentityEditor";
+import { ChannelArtwork } from "@/components/ChannelArtwork";
+import { readShowIdentity } from "@/lib/show-identity";
 import { Bot, ExternalLink, Factory, ListOrdered, Mic2, Monitor, Settings2, Smartphone } from "lucide-react";
 import { LiveQueueAdder } from "@/components/LiveQueueAdder";
 import { QueueOrderEditor } from "@/components/QueueOrderEditor";
@@ -58,11 +61,11 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
   return <main className="shell">
     <StudioNav />
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div>
+      <div className="flex items-center gap-4"><ChannelArtwork title={show.title} identity={readShowIdentity(show.brandingConfig, show.title)} compact decorative className="h-16 w-16 shrink-0 rounded-xl" /><div>
         <p className="eyebrow"><Link href="/shows" className="hover:text-cyan-200">Shows</Link> / {show.status}</p>
         <h1 className="title mt-1">{show.title}</h1>
         <p className="mt-2 text-sm text-slate-400">Broadcast state: {show.broadcastState.replaceAll("_", " ")}</p>
-      </div>
+      </div></div>
       <div className="flex flex-wrap gap-2">
         <Link href={`/studio?show=${show.id}`} className="button-primary"><Mic2 className="h-4 w-4" /> Open Studio</Link>
         <Link href={`/shows/${show.id}/preview`} className="button-secondary"><Monitor className="h-4 w-4" /> Test layouts</Link>
@@ -73,6 +76,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
 
     <nav className="mt-5 flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-2" aria-label="Show workspace"><Link href={`/studio?show=${show.id}`} className="button-secondary"><Mic2 className="h-4 w-4" /> Studio</Link><Link href={`/shows/${show.id}#running-order`} className="button-primary"><ListOrdered className="h-4 w-4" /> Running order</Link><Link href={`/shows/${show.id}?section=options#show-options`} className="button-secondary"><Settings2 className="h-4 w-4" /> Options</Link></nav>
     {typeof pack.name === "string" && <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-sm leading-6 text-slate-300"><p>Started from <strong>{pack.name}</strong>. This is your editable copy; template updates will not change it. The pack starts with music and image autoplay on; adjust both in Studio.</p>{Number(pack.missingVisuals) > 0 && <p className="mt-2 text-amber-200">At creation, stock images could not be prepared for {Number(pack.missingVisuals)} guests. Their portraits remain available. If needed, configure Pexels or Pixabay and add images using the existing caller media tools.</p>}</div>}
+    <div id="channel-artwork" className="scroll-mt-6"><ChannelIdentityEditor showId={show.id} title={show.title} initialIdentity={readShowIdentity(show.brandingConfig, show.title)} initiallyOpen={section === "options"} /></div>
 
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
       <section id="running-order" className="panel panel-pad scroll-mt-6">

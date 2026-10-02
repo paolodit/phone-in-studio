@@ -5,6 +5,7 @@ import { openaiLiveCallRequestSchema } from "@/lib/schemas";
 import { readShowFormatConfig } from "@/lib/show-format";
 import { buildOpenAILiveSessionConfig } from "@/lib/openai-live-session";
 import { createLiveCloseToken, hangupOpenAILiveSession } from "@/lib/openai-live-close";
+import { hostedMode, providerRequest } from "@/lib/hosted-platform";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   const parsed = openaiLiveCallRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "A caller, show and valid SDP offer are required. Voice auditions are private-test only." }, { status: 400 });
   const input = parsed.data;
-  if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "Add OPENAI_API_KEY and restart the server to use GPT-Live-1." }, { status: 503 });
+  if (!hostedMode() && !process.env.OPENAI_API_KEY) return NextResponse.json({ error: "Add OPENAI_API_KEY and restart the server to use GPT-Live-1." }, { status: 503 });
   const caller = await prisma.caller.findUnique({ where: { id: input.callerId } });
   if (!caller) return NextResponse.json({ error: "Caller not found." }, { status: 404 });
   let format = { formatLabel: "Private soundcheck", formatGuidance: "An isolated test, not a live broadcast. Stay in character." };
@@ -26,12 +27,10 @@ export async function POST(request: Request) {
   const session = buildOpenAILiveSessionConfig(caller, format, input.previewVoice);
   let createdSessionId: string | undefined;
   try {
-    const response = await fetch("https://api.openai.com/v1/live/sessions", {
-      method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ session, transport: { type: "webrtc", sdp: input.sdp } }), signal: AbortSignal.timeout(25_000),
-    });
+    const response = await providerRequest("/live/sessions", { session, transport: { type: "webrtc", sdp: input.sdp } }, hostedMode() ? 40_000 : 25_000);
     const result = await response.json().catch(() => null);
     if (!response.ok) {
+      if (hostedMode()) return NextResponse.json({ error: typeof result?.error === "string" ? result.error : "Your hosted voice session could not start." }, { status: response.status });
       const hint = result?.error?.code === "invalid_offer"
         ? "The WebRTC connection offer was rejected. Refresh Studio and reconnect; this is not a voice or microphone setting."
         : response.status === 401 || response.status === 403 || response.status === 404

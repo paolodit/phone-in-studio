@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useHostedMode } from "@/components/HostedRuntime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioLines, ExternalLink, Headphones, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
 import { ElevenLabsAgentVoiceProvider } from "@/lib/voice/elevenlabs-agent-provider";
@@ -30,7 +31,8 @@ type TranscriptEntry = { speaker: "HOST" | "CALLER"; text: string };
 const emptyLevels: Levels = { input: 0, output: 0, inputBands: Array(12).fill(0), outputBands: Array(12).fill(0) };
 
 export function CallerTestStudio({ caller }: { caller: CallerTestProfile }) {
-  const [providerId, setProviderId] = useState<VoiceProviderId>("openai");
+  const hosted = useHostedMode();
+  const [providerId, setProviderId] = useState<VoiceProviderId>(hosted ? "openai-live" : "openai");
   const [previewVoice, setPreviewVoice] = useState("");
   const [session, setSession] = useState<LiveVoiceSession | null>(null);
   const [status, setStatus] = useState("Ready for a private soundcheck");

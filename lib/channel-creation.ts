@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { callerFormSchema } from "@/lib/schemas";
 import { callerStructuredData, createCallerSnapshot } from "@/lib/caller";
 import { buildShowFormatConfig } from "@/lib/show-format";
+import { defaultShowIdentity } from "@/lib/show-identity";
 import { searchStockImages } from "@/lib/stock-images";
 import { independentGuestInstructions, starterPackIssue, starterPacks, type PackImage, type StarterPack } from "@/lib/starter-packs";
 
@@ -29,7 +30,7 @@ export async function createChannel(input: { title: string; mode: string; packId
   const title = input.title.trim();
   if (title.length < 3 || title.length > 120) throw new Error("Channel name must be between 3 and 120 characters.");
   if (input.mode === "custom") {
-    return prisma.show.create({ data: { title, brandingConfig: json(buildShowFormatConfig({ title })) } });
+    return prisma.show.create({ data: { title, brandingConfig: json({ ...buildShowFormatConfig({ title }), identity: defaultShowIdentity(title) }) } });
   }
   if (input.mode !== "human" && input.mode !== "auto") throw new Error("Choose how you want to create your channel.");
   const pack = starterPacks.find((item) => item.id === input.packId && item.mode === input.mode);
@@ -52,6 +53,7 @@ export async function createChannel(input: { title: string; mode: string; packId
         ...buildShowFormatConfig({ title, formatId: pack.formatId, formatGuidance: `${pack.instructions}\n${independentGuestInstructions}`, voiceProvider: pack.defaults.voiceProvider }),
         starterPack: { id: pack.id, version: pack.version, name: pack.name, missingVisuals: prepared.filter((item) => item.missing).length },
         backgroundMusic: pack.defaults.music,
+        identity: pack.identity,
         visualAutoplay: { ...pack.defaults.imageAutoplay, startedAt: 0 },
       }),
       ...(pack.mode === "auto" ? { moduleSettings: { create: { key: "AI_HOST", enabled: true, config: json({ maxTurnsPerCaller: pack.defaults.maxTurnsPerCaller, betweenCallsSeconds: pack.defaults.betweenCallsSeconds, visualPolicy: "AUTO_SHOW", visualAvoidPeople: true }) } } } : {}),

@@ -1,5 +1,6 @@
 import type { OptionalModuleKey } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { hostedMode } from "@/lib/hosted-platform";
 
 export const OPTIONAL_MODULES = {
   AI_HOST: {
@@ -13,10 +14,12 @@ export const OPTIONAL_MODULES = {
 } satisfies Record<OptionalModuleKey, { name: string; description: string }>;
 
 export async function moduleEnabled(key: OptionalModuleKey) {
+  if (hostedMode()) return false;
   return Boolean((await prisma.optionalModuleSetting.findUnique({ where: { key } }))?.enabled);
 }
 
 export async function globalModuleState() {
+  if (hostedMode()) return { AI_HOST: false, CALLER_FACTORY: false };
   const rows = await prisma.optionalModuleSetting.findMany();
   return Object.fromEntries((Object.keys(OPTIONAL_MODULES) as OptionalModuleKey[]).map((key) => [key, Boolean(rows.find((row) => row.key === key)?.enabled)])) as Record<OptionalModuleKey, boolean>;
 }

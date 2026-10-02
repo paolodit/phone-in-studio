@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { hostedMode, platformFetch } from "@/lib/hosted-platform";
 
 function signature(value: string) {
   if (!process.env.AUTH_SECRET) throw new Error("AUTH_SECRET is required.");
@@ -23,6 +24,7 @@ export function readLiveCloseToken(token: string, now = Date.now()): string | nu
 }
 
 export async function hangupOpenAILiveSession(sessionId: string) {
+  if (hostedMode()) return (await platformFetch("/api/v1/live/close", { sessionId })).ok;
   const response = await fetch(`https://api.openai.com/v1/live/sessions/${encodeURIComponent(sessionId)}/hangup`, {
     method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, signal: AbortSignal.timeout(10_000),
   });

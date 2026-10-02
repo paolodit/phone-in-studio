@@ -50,7 +50,9 @@ describe("channel creation", () => {
     const config = show.brandingConfig as Record<string, unknown>;
     expect(config.formatGuidance).toContain("Every guest is independent");
     mocks.packs[0].defaults.music.volume = 0.9;
+    mocks.packs[0].identity.palette = "forest";
     expect((config.backgroundMusic as { volume: number }).volume).toBe(0.12);
+    expect((config.identity as { palette: string }).palette).toBe("paper");
   });
   it("creates five auto guests and a private presenter copy, opts in, but never starts broadcasting", async () => {
     const show = await createChannel({ title: "Automatic show", mode: "auto", packId: "test-auto" });
