@@ -1,5 +1,7 @@
 # Optional hosted integration (contract v1)
 
+The container uses Node 24. Operators may mount a read-only JSON Docker secret and set `RUNTIME_CONFIG_FILE` to its path; the optional startup loader applies its string environment values to migrations and the app. Never put secret files in the build context. Ordinary environment variables remain supported.
+
 The same studio source and image support self-hosting and managed installations. All settings are runtime environment variables; no commercial fork is required.
 
 Leave HOSTED_MODE, HOSTED_PLATFORM_URL and HOSTED_INSTANCE_TOKEN unset for normal self-hosting.
