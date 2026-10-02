@@ -8,6 +8,8 @@ Leave HOSTED_MODE, HOSTED_PLATFORM_URL and HOSTED_INSTANCE_TOKEN unset for norma
 
 For a managed installation set HOSTED_MODE=true, HOSTED_PLATFORM_URL to an HTTPS origin, and HOSTED_INSTANCE_TOKEN to a credential scoped to that installation. Each installation must have an independent DATABASE_URL, AUTH_SECRET, artwork volume and hostname. Do not supply provider API keys to hosted installations. Their own hostname uses a host-only login cookie.
 
+Set STUDIO_PUBLIC_URL to the studio's external HTTPS origin when using a reverse proxy. Artwork writes compare the browser's Origin with this configured origin; untrusted forwarded headers cannot override it.
+
 The configured platform implements these authenticated JSON endpoints:
 - POST /api/v1/auth/exchange: accepts a single-use short-lived code; returns sessionToken and expiresIn.
 - POST /api/v1/auth/check: validates the hosted sessionToken, including revocation.

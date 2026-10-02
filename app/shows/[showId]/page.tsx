@@ -23,6 +23,8 @@ import { prisma } from "@/lib/prisma";
 import { canResetShowForReplay } from "@/lib/show-service";
 import { readShowFormatConfig, SHOW_FORMATS } from "@/lib/show-format";
 import { globalModuleState } from "@/lib/modules";
+import { VoiceRouteOptions } from "@/components/VoiceRouteOptions";
+import { hostedMode } from "@/lib/hosted-platform";
 
 const object = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
@@ -125,7 +127,7 @@ export default async function ShowDetailPage({ params, searchParams }: { params:
       <form action={updateShowAction.bind(null, show.id)} className="mt-5 grid gap-3 border-t border-slate-700/70 pt-5 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(180px,.7fr)_auto] lg:items-end">
         <label><span className="label">Programme title</span><input className="field" name="title" defaultValue={show.title} required /></label>
         <label><span className="label">Show format</span><select className="field" name="formatId" defaultValue={formatConfig.formatId}>{SHOW_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.label}</option>)}</select></label>
-        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={formatConfig.voiceProvider}><option value="openai">OpenAI Realtime 1.5 (default)</option><option value="openai-live">OpenAI GPT-Live-1 (full duplex)</option><option value="gemini">Gemini Live (optional)</option><option value="elevenlabs">ElevenLabs Agent (optional)</option><option value="fish">Fish Audio S2.1 (turn-based)</option></select></label>
+        <label><span className="label">Live voice route</span><select className="field" name="voiceProvider" defaultValue={hostedMode() ? "openai-live" : formatConfig.voiceProvider}><VoiceRouteOptions /></select></label>
         <button className="button-secondary" type="submit">Save setup</button>
         <label className="lg:col-span-3"><span className="label">Format guidance for AI callers</span><textarea className="field min-h-20" name="formatGuidance" defaultValue={formatConfig.formatGuidance} placeholder="Give callers the tone, host relationship and purpose of this format." /></label>
         <p className="text-xs leading-5 text-slate-400">Gemini Live needs <code>GEMINI_API_KEY</code>. ElevenLabs needs <code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code>. Fish needs <code>FISH_API_KEY</code> and remains turn-based because Fish supplies TTS/ASR rather than a duplex conversation model. Permanent keys stay server-side.</p>

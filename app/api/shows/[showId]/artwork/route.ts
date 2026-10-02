@@ -8,7 +8,10 @@ export const runtime = "nodejs";
 async function allowed(request: Request, showId: string) {
   if (!await isAdminSession()) return Response.json({ error: "Sign in to edit channel artwork." }, { status: 401 });
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
+  // Reverse proxies may give Next an internal HTTP URL. Trust only the operator's
+  // configured public origin, never caller-supplied forwarded headers.
+  const publicOrigin = new URL(process.env.STUDIO_PUBLIC_URL || request.url).origin;
+  if (origin && origin !== publicOrigin) return Response.json({ error: "Invalid request origin." }, { status: 403 });
   if (!await prisma.show.findUnique({ where: { id: showId }, select: { id: true } })) return Response.json({ error: "Channel not found." }, { status: 404 });
 }
 export async function POST(request: Request, { params }: { params: Promise<{ showId: string }> }) {

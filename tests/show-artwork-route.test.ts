@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ admin: vi.fn(), find: vi.fn(), store: vi.fn(), save: vi.fn(), revalidate: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ isAdminSession: mocks.admin }));
 vi.mock("@/lib/prisma", () => ({ prisma: { show: { findUnique: mocks.find } } }));
@@ -10,6 +10,7 @@ import { defaultShowIdentity } from "@/lib/show-identity";
 const context = { params: Promise.resolve({ showId: "show" }) };
 const url = "http://localhost:3000/api/shows/show/artwork";
 describe("artwork API access and request boundaries", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => { vi.clearAllMocks(); mocks.admin.mockResolvedValue(true); mocks.find.mockResolvedValue({ id: "show" }); mocks.store.mockResolvedValue(`/api/show-artwork/${"a".repeat(64)}.webp`); mocks.save.mockImplementation(async (_, identity) => identity); });
   it("requires an admin session before processing images or identity", async () => {
     mocks.admin.mockResolvedValue(false);
@@ -30,6 +31,17 @@ describe("artwork API access and request boundaries", () => {
   it("uploads into a preview without automatically changing channel settings", async () => {
     const response = await POST(new Request(url, { method: "POST", headers: { "Content-Type": "image/png" }, body: "test image bytes" }), context);
     expect(response.status).toBe(200); expect(await response.json()).toHaveProperty("artworkUrl"); expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("accepts the configured HTTPS origin behind an internal HTTP proxy", async () => {
+    vi.stubEnv("STUDIO_PUBLIC_URL", "https://studio.example.com");
+    const response = await POST(new Request(url, { method: "POST", headers: { Origin: "https://studio.example.com", "Content-Type": "image/png" }, body: "image" }), context);
+    expect(response.status).toBe(200);
+  });
+  it("does not trust forwarded headers to override the configured origin", async () => {
+    vi.stubEnv("STUDIO_PUBLIC_URL", "https://studio.example.com");
+    const response = await POST(new Request(url, { method: "POST", headers: { Origin: "https://other.example.com", "X-Forwarded-Host": "other.example.com", "X-Forwarded-Proto": "https", "Content-Type": "image/png" }, body: "image" }), context);
+    expect(response.status).toBe(403);
+    expect(mocks.store).not.toHaveBeenCalled();
   });
   it("saves only through the identity validator and refreshes the app", async () => {
     const identity = defaultShowIdentity("Test");
