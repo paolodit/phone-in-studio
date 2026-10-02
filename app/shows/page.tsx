@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, ListOrdered, Mic2, Radio, Settings2, Users } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
+import { hostedMode } from "@/lib/hosted-platform";
 import { prisma } from "@/lib/prisma";
 import { createShowAction, deleteShowAction } from "@/lib/actions/show-actions";
 import { StudioNav } from "@/components/StudioNav";
@@ -11,7 +12,7 @@ import { readShowIdentity } from "@/lib/show-identity";
 import { starterPackMenu } from "@/lib/starter-packs";
 import { readShowFormatConfig, SHOW_FORMATS } from "@/lib/show-format";
 
-const voiceRouteLabel = (provider: string) => provider === "openai-live" ? "GPT-Live-1" : provider === "gemini" ? "Gemini Live" : provider === "elevenlabs" ? "ElevenLabs" : provider === "fish" ? "Fish Audio S2.1" : "OpenAI Realtime 1.5";
+const voiceRouteLabel = (provider: string) => hostedMode() ? "GPT-Live (hosted studio)" : provider === "openai-live" ? "GPT-Live-1" : provider === "gemini" ? "Gemini Live" : provider === "elevenlabs" ? "ElevenLabs" : provider === "fish" ? "Fish Audio S2.1" : "OpenAI Realtime 1.5";
 
 export default async function ShowsPage({ searchParams }: { searchParams: Promise<{ new?: string; deleted?: string }> }) {
   await requireAdmin();
