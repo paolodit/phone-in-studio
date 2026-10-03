@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StarterPack } from "@/lib/starter-packs";
 
 const mocks = vi.hoisted(() => ({ packs: [] as StarterPack[], show: vi.fn(), caller: vi.fn(), queue: vi.fn(), host: vi.fn(), module: vi.fn(), tx: vi.fn(), search: vi.fn() }));
@@ -19,6 +19,7 @@ async function fixture(mode: "human" | "auto" = "human") {
 }
 
 describe("channel creation", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(async () => {
     vi.clearAllMocks(); mocks.packs.splice(0, mocks.packs.length, await fixture(), await fixture("auto"));
     mocks.show.mockImplementation(async ({ data }) => ({ ...structuredClone(data), id: "new-channel" }));
@@ -31,6 +32,19 @@ describe("channel creation", () => {
   it("preserves the blank custom setup without importing guests or enabling modules", async () => {
     const show = await createChannel({ title: "My own channel", mode: "custom" });
     expect(show).toMatchObject({ title: "My own channel" }); expect(mocks.caller).not.toHaveBeenCalled(); expect(mocks.search).not.toHaveBeenCalled(); expect(mocks.module).not.toHaveBeenCalled();
+  });
+  it("stores the metered voice route for hosted custom and starter shows", async () => {
+    vi.stubEnv("HOSTED_MODE", "true");
+    const blank = await createChannel({ title: "Hosted blank", mode: "custom" });
+    const pack = await createChannel({ title: "Hosted pack", mode: "human", packId: "test-human" });
+    expect(blank.brandingConfig).toMatchObject({ voiceProvider: "openai-live" });
+    expect(pack.brandingConfig).toMatchObject({ voiceProvider: "openai-live" });
+  });
+  it("blocks hosted automatic presenters before any provider lookup or write", async () => {
+    vi.stubEnv("HOSTED_MODE", "true");
+    await expect(createChannel({ title: "Hosted auto", mode: "auto", packId: "test-auto" })).rejects.toThrow("not included");
+    expect(mocks.tx).not.toHaveBeenCalled();
+    expect(mocks.search).not.toHaveBeenCalled();
   });
   it("rejects pending, mismatched and unknown packs before provider requests or writes", async () => {
     mocks.packs[0].editorialStatus = "awaiting-cast";
@@ -50,7 +64,9 @@ describe("channel creation", () => {
     const config = show.brandingConfig as Record<string, unknown>;
     expect(config.formatGuidance).toContain("Every guest is independent");
     mocks.packs[0].defaults.music.volume = 0.9;
+    mocks.packs[0].identity.palette = "forest";
     expect((config.backgroundMusic as { volume: number }).volume).toBe(0.12);
+    expect((config.identity as { palette: string }).palette).toBe("paper");
   });
   it("creates five auto guests and a private presenter copy, opts in, but never starts broadcasting", async () => {
     const show = await createChannel({ title: "Automatic show", mode: "auto", packId: "test-auto" });

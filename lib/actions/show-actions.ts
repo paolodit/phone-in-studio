@@ -7,9 +7,11 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { showSetupSchema, soundEffectFormSchema } from "@/lib/schemas";
 import { buildShowFormatConfig } from "@/lib/show-format";
-import { queueApprovedCaller, resetShowForReplay } from "@/lib/show-service";
+import { getBroadcastSnapshot, queueApprovedCaller, resetShowForReplay } from "@/lib/show-service";
+import { publishShowUpdate } from "@/lib/events";
 import { createChannel } from "@/lib/channel-creation";
 import { deleteChannel } from "@/lib/channel-deletion";
+import { hostedMode } from "@/lib/hosted-platform";
 
 export async function createShowAction(_: { error?: string }, formData: FormData): Promise<{ error?: string }> {
   await requireAdmin();
@@ -24,8 +26,10 @@ export async function createShowAction(_: { error?: string }, formData: FormData
 export async function updateShowAction(showId: string, formData: FormData) {
   await requireAdmin();
   const input = showSetupSchema.parse(Object.fromEntries(formData.entries()));
+  if (hostedMode()) input.voiceProvider = "openai-live";
   const current = await prisma.show.findUniqueOrThrow({ where: { id: showId }, select: { brandingConfig: true } });
   await prisma.show.update({ where: { id: showId }, data: { title: input.title, brandingConfig: buildShowFormatConfig(input, current.brandingConfig) as Prisma.InputJsonValue } });
+  publishShowUpdate(showId, await getBroadcastSnapshot(showId));
   revalidatePath(`/shows/${showId}`);
   revalidatePath("/shows");
   revalidatePath("/studio");
