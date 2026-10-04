@@ -1,6 +1,6 @@
 # NextCaller logo directions
 
-**Latest round: [Callers forming the letters — E–G](caller-letterforms/README.md).**
+**Selected: [F with an indignant first l — artwork and usage](SELECTED.md).**
 
 Four identity concepts for the hosted NextCaller service, generated on 3 October
 2026 using built-in Codex ImageGen. The public application remains AI Phone-In
@@ -9,7 +9,7 @@ not a rename or a second version of the app.
 
 The brief was to replace the illustrated telephone with a simpler, more
 recognizable identity. These PNGs are concepts for selection, not final vector
-masters. No concept has replaced the current website or application logo.
+masters. Concept F was subsequently selected and revised for the hosted website; see the selection above.
 The exact prompts are in [prompts.json](prompts.json).
 
 | Direction | Character | Assessment |

@@ -4,7 +4,7 @@ Three wordmark alternatives generated on 4 October 2026 using built-in Codex
 ImageGen, following the direction that different caller personalities should
 help form some of the letters. Their poses and bodies become the letter shapes.
 
-These are PNG concept studies. No version has been selected or deployed.
+These are the original PNG concept studies. [F was selected and revised](../SELECTED.md), replacing the first l with an indignant caller.
 The exact prompts are saved in [prompts.json](prompts.json).
 
 | Concept | How the callers form the word | Assessment |
