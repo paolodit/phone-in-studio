@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { hostedMode, hostedSessionValid, platformFetch, HOSTED_COOKIE } from "@/lib/hosted-platform";
 
 const COOKIE_NAME = "ai-phone-in-session";
 const payload = "admin";
@@ -26,6 +27,7 @@ function verify(token: string | undefined) {
 }
 
 export async function isAdminSession() {
+  if (hostedMode()) return hostedSessionValid((await cookies()).get(HOSTED_COOKIE)?.value);
   return verify((await cookies()).get(COOKIE_NAME)?.value);
 }
 
@@ -46,10 +48,14 @@ export async function setAdminSession() {
 
 export async function clearAdminSession() {
   const cookieStore = await cookies();
+  const hostedToken = cookieStore.get(HOSTED_COOKIE)?.value;
+  if (hostedMode() && hostedToken) await platformFetch("/api/v1/auth/revoke", { sessionToken: hostedToken }).catch(() => undefined);
   cookieStore.delete(COOKIE_NAME);
+  cookieStore.delete(HOSTED_COOKIE);
 }
 
 export function validAdminPassword(password: string) {
+  if (hostedMode()) return false;
   const expected = process.env.ADMIN_PASSWORD;
   if (!expected) throw new Error("ADMIN_PASSWORD is required.");
   return password.length === expected.length && timingSafeEqual(Buffer.from(password), Buffer.from(expected));

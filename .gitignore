@@ -8,3 +8,4 @@ coverage
 *.log
 prisma/dev.db
 tsconfig.tsbuildinfo
+data/show-artwork/

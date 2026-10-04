@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-04",
+  "tool": "Built-in Codex ImageGen",
+  "selectedConcept": "F — Cast of Characters",
+  "edits": [
+    {
+      "asset": "public/branding/nextcaller-wordmark.png",
+      "input": "docs/branding/nextcaller-2026-10/caller-letterforms/f-cast-of-characters.png",
+      "prompt": "Use case: precise-object-edit.\nAsset type: selected NextCaller website wordmark, concept F revision.\nInput image: edit target, the existing F \"Cast of Characters\" wordmark.\nChange only the FIRST of the two letter-l people: the tall bespectacled, passive man between the a and the relaxed woman. Replace him with an indignant adult caller: slightly hunched raised shoulders, tightly knitted eyebrows, a clenched angular jaw, hands planted firmly on hips, one elbow pushed out. Make him comically furious and recognizably human, not scary. Remove his glasses. His elongated body and a distinct flat foot pointing right MUST still make a clear lowercase l silhouette. Keep him in the same narrow footprint, with a navy shirt and cyan trousers, economical expressive ink outlines.\nPreserve the rest of the artwork faithfully: the loud gesticulating x, the curved chatty c, the relaxed crossed-arms woman forming the second l, all normal letterforms, their spacing, sizes, visual style, navy/cyan/white palette, and one horizontal baseline. The exact word remains \"nextcaller\", n e x t c a l l e r, all ten letters once.\nProduction preparation: output the whole horizontal wordmark on a genuinely transparent background, preserving opaque white interiors on faces, hands and shoes. No white rectangle, checkerboard pattern, texture, shadows, mockup or added text. Trim the excessive empty margins around the wordmark, leaving a modest even clear border without clipping any hand, hair or foot. Crisp clean edges and high resolution."
+    },
+    {
+      "asset": "public/branding/nextcaller-icon.png",
+      "input": "public/branding/nextcaller-wordmark.png",
+      "prompt": "Use case: precise-object-edit.\nAsset type: NextCaller companion browser-tab icon.\nInput image is the selected NextCaller wordmark. Extract the newly indignant caller from the FIRST l (navy shirt, cyan trousers, angular angry face, black swept spiky hair, no glasses, hands on hips). Make a compact bust portrait of this same caller, from upper chest to hair, with his furious knitted eyebrows and clenched angular jaw. Preserve this specific character design, navy ink, opaque white face and minimal cyan accent. Simplify only tiny facial lines so the expression reads at 32 pixels. Single head and shoulders, centered and filling a square, small safe margin, no typography, letters or extra objects. Genuinely transparent background, crisp flat illustrated edges, no shadow, texture or white rectangle. This is a small companion icon to the existing wordmark, not a new logo direction."
+    }
+  ]
+}

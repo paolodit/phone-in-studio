@@ -7,6 +7,8 @@ import { getStudioState } from "@/lib/studio-state";
 import { StudioNav } from "@/components/StudioNav";
 import { StudioClient } from "@/components/StudioClient";
 import { readShowFormatConfig } from "@/lib/show-format";
+import { ChannelArtwork } from "@/components/ChannelArtwork";
+import { readShowIdentity } from "@/lib/show-identity";
 
 export default async function StudioPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
   await requireAdmin();
@@ -22,5 +24,5 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   ]);
 
   const formatConfig = readShowFormatConfig(show.brandingConfig, show.title);
-  return <main className="shell"><StudioNav /><div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow">Host Studio · {formatConfig.formatLabel}</p><h1 className="title mt-1">{show.title}</h1></div><div className="flex flex-wrap gap-2"><Link className="button-secondary" href={`/shows/${show.id}`}>Prepare show</Link><Link className="button-secondary" href={`/callers?show=${show.id}`}>+ Add callers</Link><Link className="button-secondary" href={`/broadcast/${show.id}?token=${show.broadcastToken}&mode=full`} target="_blank">Preview broadcast</Link></div></div><StudioClient showId={show.id} initialSnapshot={snapshot} initialStudioState={studioState} initialVoiceProvider={formatConfig.voiceProvider} /></main>;
+  return <main className="shell"><StudioNav /><div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div className="flex min-w-0 items-center gap-4"><Link href={`/shows/${show.id}?section=options#channel-artwork`} title="Edit channel artwork"><ChannelArtwork title={show.title} identity={readShowIdentity(show.brandingConfig, show.title)} compact className="h-16 w-16 shrink-0 rounded-xl" /></Link><div><p className="eyebrow">Host Studio · {formatConfig.formatLabel}</p><h1 className="title mt-1">{show.title}</h1></div></div><div className="flex flex-wrap gap-2"><Link className="button-secondary" href={`/shows/${show.id}`}>Prepare show</Link><Link className="button-secondary" href={`/callers?show=${show.id}`}>+ Add callers</Link><Link className="button-secondary" href={`/broadcast/${show.id}?token=${show.broadcastToken}&mode=full`} target="_blank">Preview broadcast</Link></div></div><StudioClient showId={show.id} initialSnapshot={snapshot} initialStudioState={studioState} initialVoiceProvider={formatConfig.voiceProvider} /></main>;
 }

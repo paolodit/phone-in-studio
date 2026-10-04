@@ -3,6 +3,7 @@ import { createCallerSnapshot } from "@/lib/caller";
 import { callerSnapshotSchema } from "@/lib/schemas";
 import { prisma } from "@/lib/prisma";
 import { publishShowUpdate } from "@/lib/events";
+import { readShowIdentity } from "@/lib/show-identity";
 import { publicCallerFromSnapshot, type BroadcastSnapshot } from "@/lib/public-show";
 import { transitionShow } from "@/lib/show-state";
 import type { StudioControlAction } from "@/lib/schemas";
@@ -46,6 +47,7 @@ export async function getBroadcastSnapshot(showId: string): Promise<BroadcastSna
   return {
     showId: show.id,
     title: show.title,
+    identity: readShowIdentity(show.brandingConfig, show.title),
     broadcastState: show.broadcastState,
     updatedAt: show.updatedAt.toISOString(),
     caller,
