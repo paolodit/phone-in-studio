@@ -1,5 +1,7 @@
 # NextCaller logo directions
 
+**Latest round: [Callers forming the letters — E–G](caller-letterforms/README.md).**
+
 Four identity concepts for the hosted NextCaller service, generated on 3 October
 2026 using built-in Codex ImageGen. The public application remains AI Phone-In
 Studio; these are shared symbol candidates and NextCaller wordmark studies,
