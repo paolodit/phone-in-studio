@@ -1,6 +1,17 @@
 <div align="center">
 
-<h1>AI Phone-In / Studio</h1>
+<a href="https://nextcaller.xyz">
+  <img src="./public/branding/nextcaller-social.png" alt="NextCaller — your mic, a whole cast of AI callers" width="900" />
+</a>
+
+<h1>AI Phone-In Studio · NextCaller</h1>
+
+<p>The open-source studio behind <a href="https://nextcaller.xyz"><strong>NextCaller.xyz</strong></a>.</p>
+
+<p><a href="https://nextcaller.xyz">Visit NextCaller</a> · <a href="#quick-start">Run it yourself</a> · <a href="https://www.youtube.com/watch?v=eZAmzG3dG9I">Watch the demo</a></p>
+
+<p>NextCaller offers a hosted preview of the same studio. Paid studios are not open yet.<br />
+Self-hosting remains available, with your own infrastructure and API keys.</p>
 
 <p><strong>Build and run live, human-hosted phone-in shows with fictional AI callers.</strong></p>
 
@@ -38,6 +49,18 @@ privacy-filtered programme display to OBS, Twitch, TikTok Live Studio, Kick or a
 > This is a hobbyist-first, local production toolkit. One trusted admin can build callers, run shows and open the same show from a second producer browser. It deliberately avoids enterprise account and team-management infrastructure so the live workflow stays approachable.
 
 **[Roadmap and wider vision](./ROADMAP.md)** · **[MIT licence](./LICENSE)**
+
+## Meet the callers
+
+<p>
+  <img src="./public/branding/caller-chatty.png" alt="The enthusiastic storyteller" width="110" />
+  <img src="./public/branding/nextcaller-icon.png" alt="The indignant caller" width="110" />
+  <img src="./public/branding/caller-relaxed.png" alt="The amused regular" width="110" />
+</p>
+
+A different personality on every line. Shape their stories and voices, put
+yourself on the mic, and see where the conversation goes.
+[Explore NextCaller](https://nextcaller.xyz) · [Brand assets](./public/branding/README.md)
 
 ## The production flow
 
