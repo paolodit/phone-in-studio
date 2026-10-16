@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { hostedMode, hostedSessionValid, platformFetch, HOSTED_COOKIE } from "@/lib/hosted-platform";
+import { holdHostedRequest } from "@/lib/hosted-lifecycle";
 
 const COOKIE_NAME = "ai-phone-in-session";
 const payload = "admin";
@@ -27,7 +28,10 @@ function verify(token: string | undefined) {
 }
 
 export async function isAdminSession() {
-  if (hostedMode()) return hostedSessionValid((await cookies()).get(HOSTED_COOKIE)?.value);
+  if (hostedMode()) {
+    const valid = await hostedSessionValid((await cookies()).get(HOSTED_COOKIE)?.value);
+    return valid && holdHostedRequest();
+  }
   return verify((await cookies()).get(COOKIE_NAME)?.value);
 }
 

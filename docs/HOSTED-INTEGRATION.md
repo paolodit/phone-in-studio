@@ -1,5 +1,20 @@
 # Optional hosted integration (contract v1)
 
+Optional sleep/wake protocol v1 is available with `HOSTED_SLEEP_ENABLED=true`.
+It requires a single Node process and one running replica. The platform calls
+`POST /api/hosted/lifecycle` with the installation bearer token and a UUID
+`token`, using action `prepare` or `cancel`. Prepare freezes new authenticated
+work and confirms no live show, active queue item, running batch, open request
+or broadcast stream after `STUDIO_IDLE_SECONDS` (default 900). A failed or
+unknown check refuses sleep. A successful prepare stays frozen until cancel or
+process restart; tokens must match. Duplicate preparation cannot bypass an
+unfinished database check. Health advertises `sleepProtocol: 1` when enabled.
+
+Hosted pages send authenticated presence every 30 seconds; live show state never
+expires automatically. The platform must separately protect unresolved AI work,
+coordinate handoffs and preserve databases/volumes while scaling the container
+to zero. Standalone installations do not enable this integration by default.
+
 The container uses Node 24. Operators may mount a read-only JSON Docker secret and set `RUNTIME_CONFIG_FILE` to its path; the optional startup loader applies its string environment values to migrations and the app. Never put secret files in the build context. Ordinary environment variables remain supported.
 
 The same studio source and image support self-hosting and managed installations. All settings are runtime environment variables; no commercial fork is required.
