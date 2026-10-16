@@ -18,12 +18,13 @@ describe("Persistent hosted stop barrier",()=>{
     const first=new IdleGuard(()=>now,state);now=1000;
     const token="12345678-1234-1234-1234-123456789abc";
     expect(await first.prepare(token,1000,async()=>false)).toBe(true);
+    expect(first.cancel(token,true)).toBe(false);
     expect(JSON.parse(readFileSync(file,"utf8")).token).toBe(token);
     const restarted=new IdleGuard(()=>now,state);
     expect(restarted.enter()).toBeNull();
     expect(await restarted.prepare(token,1000,async()=>false)).toBe(true);
     expect(restarted.cancel("wrong")).toBe(false);
-    expect(restarted.cancel(token)).toBe(true);
+    expect(restarted.cancel(token,true)).toBe(true);
     expect(state.load()).toBeNull();
     expect(new IdleGuard(()=>now,state).enter()).not.toBeNull();
   });

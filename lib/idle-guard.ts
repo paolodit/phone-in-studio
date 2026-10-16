@@ -11,10 +11,12 @@ export class IdleGuard {
   private draining: string | null = null;
   private prepared = false;
   private checking = false;
+  private restored = false;
   constructor(private readonly clock = Date.now, private readonly state?: IdleState) {
     this.lastActivity = clock();
     this.draining = state?.load() ?? null;
     this.prepared = this.draining !== null;
+    this.restored = this.prepared;
   }
   enter(): (() => void) | null {
     if (this.draining) return null;
@@ -46,12 +48,15 @@ export class IdleGuard {
       this.checking = false;
     }
   }
-  cancel(token: string) {
+  cancel(token: string, requireRestart = false) {
     if (this.draining && this.draining !== token) return false;
     if (this.checking) return false;
+    // A wake must never unfreeze the old process that is still shutting down.
+    if (requireRestart && this.draining && !this.restored) return false;
     this.state?.clear();
     this.draining = null;
     this.prepared = false;
+    this.restored = false;
     this.lastActivity = this.clock();
     return true;
   }

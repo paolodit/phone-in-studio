@@ -1,9 +1,9 @@
 # Optional hosted integration (contract v1)
 
-Optional sleep/wake protocol v1 is available with `HOSTED_SLEEP_ENABLED=true`.
+Optional sleep/wake protocol v2 is available with `HOSTED_SLEEP_ENABLED=true`.
 It requires a single Node process and one running replica. The platform calls
 `POST /api/hosted/lifecycle` with the installation bearer token and a UUID
-`token`, using action `prepare` or `cancel`. Prepare freezes new authenticated
+`token`, using action `prepare`, `cancel` or `wake`. Prepare freezes new authenticated
 work and confirms no live show, active queue item, running batch, open request
 or broadcast stream after `STUDIO_IDLE_SECONDS` (default 900). A failed or
 unknown check refuses sleep. A successful prepare persists its token in
@@ -11,7 +11,12 @@ unknown check refuses sleep. A successful prepare persists its token in
 restarts until matching cancellation. The data directory must be persistent and
 writable. Corrupt state or failed writes fail closed; never delete this file to
 bypass a pending stop. Duplicate preparation cannot bypass an
-unfinished database check. Health advertises `sleepProtocol: 1` when enabled.
+unfinished database check. Health advertises `sleepProtocol: 2` when enabled.
+Use `cancel` only before dispatching a stop; use `wake` after an acknowledged
+stop/start. Wake refuses to reopen the old prepared process while it is shutting
+down, and succeeds only after a replacement process has loaded the saved barrier.
+Unknown outcomes of container-control requests require operator reconciliation;
+never cancel admission or retry a mutation that may still be in flight.
 
 Hosted pages send authenticated presence every 30 seconds; live show state never
 expires automatically. The platform must separately protect unresolved AI work,

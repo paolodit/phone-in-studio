@@ -14,9 +14,9 @@ export async function POST(request: Request) {
     const raw = await request.text();
     if (raw.length > 300) return new Response(null, { status: 413 });
     const input = JSON.parse(raw);
-    if (!/^[a-f0-9-]{36}$/.test(input.token || "") || !["prepare", "cancel"].includes(input.action))
+    if (!/^[a-f0-9-]{36}$/.test(input.token || "") || !["prepare", "cancel", "wake"].includes(input.action))
       return new Response(null, { status: 400 });
-    const accepted = input.action === "cancel" ? idleGuard.cancel(input.token) :
+    const accepted = input.action !== "prepare" ? idleGuard.cancel(input.token, input.action === "wake") :
       await idleGuard.prepare(input.token, hostedIdleMs(), async () => {
         const [shows, callers, jobs] = await Promise.all([
           // LIVE includes breaks and held calls. Never expire this protection.
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         ]);
         return shows + callers + jobs > 0;
       });
-    return Response.json({ protocol: 1, accepted }, { status: accepted ? 200 : 409, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ protocol: 2, accepted }, { status: accepted ? 200 : 409, headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "Studio safety check unavailable; keep running." }, { status: 503 });
   }
