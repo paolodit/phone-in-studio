@@ -6,8 +6,11 @@ It requires a single Node process and one running replica. The platform calls
 `token`, using action `prepare` or `cancel`. Prepare freezes new authenticated
 work and confirms no live show, active queue item, running batch, open request
 or broadcast stream after `STUDIO_IDLE_SECONDS` (default 900). A failed or
-unknown check refuses sleep. A successful prepare stays frozen until cancel or
-process restart; tokens must match. Duplicate preparation cannot bypass an
+unknown check refuses sleep. A successful prepare persists its token in
+`data/hosted-sleep.json` before acknowledging and stays frozen across process
+restarts until matching cancellation. The data directory must be persistent and
+writable. Corrupt state or failed writes fail closed; never delete this file to
+bypass a pending stop. Duplicate preparation cannot bypass an
 unfinished database check. Health advertises `sleepProtocol: 1` when enabled.
 
 Hosted pages send authenticated presence every 30 seconds; live show state never

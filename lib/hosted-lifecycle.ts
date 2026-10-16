@@ -1,9 +1,12 @@
 import { after } from "next/server";
 import { hostedMode } from "./hosted-platform";
 import { IdleGuard } from "./idle-guard";
+import { fileIdleState } from "./idle-state";
+import path from "node:path";
 
 const shared = globalThis as unknown as { hostedIdleGuard?: IdleGuard };
-export const idleGuard = shared.hostedIdleGuard ??= new IdleGuard();
+export const idleGuard = shared.hostedIdleGuard ??= new IdleGuard(Date.now,
+  hostedSleepEnabled() ? fileIdleState(path.join(process.cwd(), "data", "hosted-sleep.json")) : undefined);
 export function hostedSleepEnabled() {
   return hostedMode() && process.env.HOSTED_SLEEP_ENABLED === "true";
 }
