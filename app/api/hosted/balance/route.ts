@@ -1,0 +1,2 @@
+import { isAdminSession } from "@/lib/auth";import { hostedMode,platformFetch } from "@/lib/hosted-platform";
+export async function GET(){if(!hostedMode())return new Response(null,{status:404});if(!await isAdminSession())return Response.json({error:"Unauthorized"},{status:401});try{const response=await platformFetch("/api/v1/balance");return Response.json(await response.json(),{status:response.status,headers:{"Cache-Control":"no-store"}});}catch{return Response.json({error:"Balance is temporarily unavailable."},{status:503});}}

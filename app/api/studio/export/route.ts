@@ -1,0 +1,3 @@
+import {isAdminSession} from "@/lib/auth";import {exportStudio} from "@/lib/studio-export";
+export const runtime="nodejs";
+export async function GET(){if(!await isAdminSession())return Response.json({error:"Unauthorized"},{status:401});try{const snapshot=await exportStudio();return new Response(JSON.stringify(snapshot),{headers:{"Content-Type":"application/json","Content-Disposition":'attachment; filename="studio-export-'+new Date().toISOString().slice(0,10)+'.json"',"Cache-Control":"no-store"}});}catch{return Response.json({error:"Export could not complete. Ask your operator for a full studio backup."},{status:503});}}

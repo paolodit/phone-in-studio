@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "overrides": {
+    "postcss": "$postcss"
+  },
   "scripts": {
     "dev": "node scripts/local-dev-database.mjs dev",
     "dev:next": "next dev",
@@ -33,10 +36,11 @@
     "@prisma/client": "^7.8.0",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.24.0",
-    "next": "^15.5.18",
+    "next": "^15.5.25",
     "pg": "^8.22.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "sharp": "^0.35.4",
     "zod": "3.24.1"
   },
   "devDependencies": {
@@ -47,12 +51,12 @@
     "@types/react-dom": "19.1.2",
     "@types/ws": "^8.18.1",
     "autoprefixer": "10.4.21",
-    "postcss": "8.5.3",
+    "postcss": "^8.5.28",
     "prisma": "^7.8.0",
     "tailwindcss": "3.4.17",
     "tsx": "4.19.3",
     "typescript": "5.8.3",
-    "vitest": "3.1.3",
+    "vitest": "^4.1.11",
     "ws": "^8.21.3"
   }
 }

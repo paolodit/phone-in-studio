@@ -1,0 +1,15 @@
+import {beforeEach,afterEach,describe,it,expect,vi} from "vitest";
+import {hostedMode,platformOrigin,platformFetch,providerRequest,hostedSessionValid} from "@/lib/hosted-platform";
+import {middleware} from "@/middleware";import {NextRequest} from "next/server";
+describe("Optional hosted integration",()=>{
+ beforeEach(()=>{vi.stubEnv("HOSTED_MODE","");vi.stubEnv("HOSTED_PLATFORM_URL","");vi.stubEnv("HOSTED_INSTANCE_TOKEN","");vi.stubGlobal("fetch",vi.fn().mockResolvedValue(Response.json({authenticated:true})));});
+ afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
+ it("keeps self-hosted provider requests direct",async()=>{vi.stubEnv("OPENAI_API_KEY","self-hosted-key");await providerRequest("/live/sessions",{session:{}},1000);expect(hostedMode()).toBe(false);expect(vi.mocked(fetch).mock.calls[0][0]).toBe("https://api.openai.com/v1/live/sessions");expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({Authorization:"Bearer self-hosted-key"});});
+ it("partial hosted configuration never falls back to a permanent provider key",async()=>{vi.stubEnv("HOSTED_MODE","true");vi.stubEnv("OPENAI_API_KEY","must-not-use");await expect(providerRequest("/live/sessions",{},1000)).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();});
+ it("sends only the installation token to the configured platform",async()=>{vi.stubEnv("HOSTED_PLATFORM_URL","https://platform.example");vi.stubEnv("HOSTED_INSTANCE_TOKEN","studio-only");vi.stubEnv("OPENAI_API_KEY","must-not-use");await providerRequest("/live/sessions",{session:{}},1000);const [url,options]=vi.mocked(fetch).mock.calls[0];expect(url).toBe("https://platform.example/api/v1/live/sessions");expect(options?.headers).toMatchObject({Authorization:"Bearer studio-only"});expect(JSON.stringify(options)).not.toContain("must-not-use");expect(options?.redirect).toBe("error");});
+ it("never grants a hosted session during an outage",async()=>{vi.stubEnv("HOSTED_MODE","true");expect(await hostedSessionValid("token")).toBe(false);});
+ it.each(["http://remote.example","https://user:pass@platform.example","https://platform.example/path","https://platform.example?key=value"])("rejects unsafe platform origins %s",value=>{vi.stubEnv("HOSTED_PLATFORM_URL",value);expect(()=>platformOrigin()).toThrow();});
+ it("does not allow callers to construct arbitrary gateway paths",async()=>{await expect(platformFetch("/api/v1/../admin")).rejects.toThrow();});
+ it.each(["/api/realtime/call","/api/gemini/call","/api/elevenlabs/call","/api/fish/respond","/api/images/generate","/api/ai-host/speech","/api/caller-factory/batches/a/generate"])("blocks unmetered adapters in hosted mode %s",path=>{vi.stubEnv("HOSTED_MODE","true");expect(middleware(new NextRequest("https://studio.example"+path)).status).toBe(403);});
+ it("leaves self-hosted adapters and supported hosted routes available",()=>{expect(middleware(new NextRequest("https://studio.example/api/realtime/call")).status).toBe(200);vi.stubEnv("HOSTED_MODE","true");expect(middleware(new NextRequest("https://studio.example/api/openai-live/call")).status).toBe(200);});
+});
