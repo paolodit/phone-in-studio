@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isOpenAILiveVoice } from "@/lib/openai-live-voices";
 
-const optionalText = z.string().trim().optional().transform((value) => value || undefined);
+const optionalText = z.string().trim().optional().transform((value) => value || undefined).optional();
 
 export const callerFormSchema = z.object({
   firstName: z.string().trim().min(1).max(80),
