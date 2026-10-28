@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useHostedMode } from "@/components/HostedRuntime";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Mic2, PauseCircle, PhoneOff, Volume2, SlidersHorizontal } from "lucide-react";
 import type { BroadcastSnapshot } from "@/lib/public-show";
@@ -68,7 +69,8 @@ function StudioInstance({
   const [volume, setVolume] = useState(0.9);
   const [muted, setMuted] = useState(false);
   const [recordingStopSignal, setRecordingStopSignal] = useState(0);
-  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(initialVoiceProvider);
+  const hosted = useHostedMode();
+  const [voiceProvider, setVoiceProvider] = useState<VoiceProviderId>(hosted ? "openai-live" : initialVoiceProvider);
   const [sessionConnected, setSessionConnected] = useState(false);
   const [liveDirection, setLiveDirection] = useState<LiveDirection>({ ...neutralLiveDirection });
   const [transcript, setTranscript] = useState<{ speaker: "HOST" | "CALLER"; text: string }[]>([]);

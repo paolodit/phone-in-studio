@@ -15,8 +15,10 @@ const run = (args, url) => new Promise((resolve, reject) => {
   child.on("error", reject); child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Verification command exited ${code}.`)));
 });
 let created = false;
+let previousSearchPath;
 try {
   await admin.connect();
+  previousSearchPath = (await admin.query("SHOW search_path")).rows[0].search_path;
   // Prisma's embedded local runtime does not isolate named databases. A named
   // schema is respected by both migrate and the pg adapter, including locally.
   await admin.query(`CREATE SCHEMA "${name}"`); created = true;
@@ -25,5 +27,8 @@ try {
   await run(["node_modules/tsx/dist/cli.mjs", "scripts/verify-channel-flow.ts"], base.toString());
 } finally {
   if (created && /^phone_in_channel_test_[a-f0-9]{16}$/.test(name)) await admin.query(`DROP SCHEMA "${name}" CASCADE`);
+  // The embedded runtime shares session settings across connections. Restore
+  // the previous path so command-line clients don't target a removed test schema.
+  if (previousSearchPath) await admin.query("SELECT set_config('search_path', $1, false)", [/^phone_in_channel_test_[a-f0-9]{16}$/.test(previousSearchPath) ? "public" : previousSearchPath]);
   await admin.end();
 }

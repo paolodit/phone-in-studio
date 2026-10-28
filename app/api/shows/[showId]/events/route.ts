@@ -3,6 +3,7 @@ import { isAdminSession } from "@/lib/auth";
 import { subscribeToShow, subscribeToShowAudioLevels, subscribeToShowDeleted } from "@/lib/events";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
+import { holdHostedStream } from "@/lib/hosted-lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ show
     throw error;
   }
   const encoder = new TextEncoder();
+  const release = holdHostedStream();
+  if (!release) return new Response("Open your studio from your account.", { status: 503 });
   let unsubscribe = () => {};
   let unsubscribeAudio = () => {};
   let unsubscribeDeleted = () => {};
@@ -31,6 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ show
   const close = () => {
     if (closed) return;
     closed = true;
+    release();
     unsubscribe(); unsubscribeAudio(); unsubscribeDeleted();
     if (heartbeat) clearInterval(heartbeat);
     request.signal.removeEventListener("abort", close);

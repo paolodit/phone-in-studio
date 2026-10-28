@@ -10,6 +10,7 @@ import {
   type GeneratedCallerDraft,
 } from "@/lib/schemas";
 import { resolveOpenAIVoice } from "@/lib/voices";
+import { hostedMode, providerRequest } from "@/lib/hosted-platform";
 
 export const CALLER_WORKSHOP_PROMPT_VERSION = "2026-07-17.1";
 const DEFAULT_CALLER_GENERATION_MODEL = "gpt-5.4-mini";
@@ -96,28 +97,27 @@ export async function requestStructuredOutput<T>(options: {
   validate: (value: unknown) => T;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new CallerWorkshopError("Caller Workshop is not configured. Set OPENAI_API_KEY to enable it.", "not_configured");
+  if (!hostedMode() && !apiKey) throw new CallerWorkshopError("Caller Workshop is not configured. Set OPENAI_API_KEY to enable it.", "not_configured");
 
   let response: Response;
   try {
-    response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      signal: AbortSignal.timeout(180_000),
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    response = await providerRequest("/responses", {
         model: process.env.OPENAI_CALLER_GENERATION_MODEL ?? DEFAULT_CALLER_GENERATION_MODEL,
         store: false,
         max_output_tokens: options.maxOutputTokens,
         instructions: options.instructions,
         input: options.input,
         text: { format: { type: "json_schema", name: options.name, strict: true, schema: options.schema } },
-      }),
-    });
+      }, 185_000);
   } catch {
     throw new CallerWorkshopError("Caller Workshop could not reach OpenAI. Please try again shortly.", "provider");
   }
 
   const payload = await response.json().catch(() => null) as OpenAiResponsePayload | null;
+  if (hostedMode() && !response.ok) {
+    const error = (payload as { error?: unknown } | null)?.error;
+    throw new CallerWorkshopError(typeof error === "string" ? error : "Hosted generation could not start. Check your studio balance.", "provider");
+  }
   if (!response.ok || !payload) throw new CallerWorkshopError("Caller Workshop could not produce a draft. Check the configured model and try again.", "provider");
 
   try {

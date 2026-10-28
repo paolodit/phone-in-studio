@@ -1,10 +1,13 @@
 import type { CallerFormInput } from "@/lib/schemas";
 import type { ShowFormatId, VoiceProviderId } from "@/lib/show-format";
 import type { StarterPackMenuItem } from "@/lib/channel-creation-options";
+import type { ShowIdentity } from "@/lib/show-identity";
+import { verdictCast, revelationsCast, jokeCast } from "@/lib/starter-casts";
 
 export type PackImage = { url: string; label: string; creditText?: string; creditUrl?: string };
 export type StarterGuest = {
   id: string;
+  preview?: string;
   caller: CallerFormInput;
   portrait: PackImage;
   imagery: { query: string; images?: readonly PackImage[] };
@@ -22,6 +25,7 @@ export type StarterPack = {
   cast: readonly StarterGuest[];
   presenter?: StarterPresenter;
   imagery: { query: string; imagesPerGuest: number };
+  identity: ShowIdentity;
   defaults: {
     voiceProvider: VoiceProviderId;
     music: { enabled: boolean; trackId: string; volume: number; loop: boolean };
@@ -38,29 +42,31 @@ const defaults = (trackId: string): StarterPack["defaults"] => ({
 });
 export const independentGuestInstructions = "Every guest is independent. Do not invent relationships, shared history, shared story state or awareness of other callers in this channel. Speak only from this caller’s own story and the current conversation with the host.";
 
-// Editorial source of truth. Final characters have deliberately NOT been invented.
-// Populate cast (and the auto presenter/theme), then set editorialStatus to ready.
+// Editorial source of truth. Authored human casts are ready; the auto theme is pending.
 // The creation service validates the complete pack again before writing anything.
 export const starterPacks: readonly StarterPack[] = [
   {
     id: "am-i-the-asshole", version: 1, mode: "human", name: "Am I the A**hole?",
     description: "Personal disputes, uncomfortable details and your verdict. Question each caller before deciding who was in the wrong.",
     instructions: "Callers explain a specific personal dispute from their own perspective. Let the human host ask questions, uncover relevant details and deliver a verdict. Do not deliver the host’s verdict for them. React naturally to a fair challenge; do not force every story towards the same answer.",
-    formatId: "advice", expectedGuests: 6, editorialStatus: "awaiting-cast", cast: [],
+    formatId: "advice", expectedGuests: 6, editorialStatus: "ready", cast: verdictCast,
+    identity: { palette: "paper", font: "editorial", motif: "verdict", label: "YOUR CALL. YOUR VERDICT.", tagline: "Two sides. One host. No easy answers.", artworkUrl: null },
     imagery: { query: "everyday life home objects", imagesPerGuest: 3 }, defaults: defaults("cool-vibes"),
   },
   {
     id: "who-booked-these-guests", version: 1, mode: "human", name: "Who Booked These Guests?",
     description: "Outrageous personal stories and unexpected revelations, with the energy of a Jerry Springer-style phone-in.",
     instructions: "Bring a heightened, fictional personal story with specific stakes and surprising revelations. Give the host room to question, challenge and react. Reveal details through conversation, not an opening monologue. No shared cast relationships or staged confrontations between guests. Keep the drama in the story, not abuse of real people.",
-    formatId: "entertainment", expectedGuests: 6, editorialStatus: "awaiting-cast", cast: [],
+    formatId: "entertainment", expectedGuests: 6, editorialStatus: "ready", cast: revelationsCast,
+    identity: { palette: "electric", font: "poster", motif: "burst", label: "EXPECT THE UNEXPECTED", tagline: "The line is open. The stories are something else.", artworkUrl: null },
     imagery: { query: "telephone colorful living room", imagesPerGuest: 3 }, defaults: defaults("local-forecast"),
   },
   {
     id: "bad-joke-hotline", version: 1, mode: "human", name: "Bad Joke Hotline",
     description: "Six comedy personalities, questionable delivery and jokes that may need explaining. You decide when to move on.",
     instructions: "Bring the caller’s own prepared jokes and distinctive comedy style. Tell one joke at a time and let the host respond. Questionable delivery is part of the caller’s personality, not a reason to ignore interruptions. Stay in a responsive phone conversation; do not turn the call into a stand-up monologue.",
-    formatId: "entertainment", expectedGuests: 6, editorialStatus: "awaiting-cast", cast: [],
+    formatId: "entertainment", expectedGuests: 6, editorialStatus: "ready", cast: jokeCast,
+    identity: { palette: "butter", font: "mono", motif: "waves", label: "GROAN-UPS WELCOME", tagline: "Six comic voices. Absolutely no laugh guarantee.", artworkUrl: null },
     imagery: { query: "comedy microphone stage", imagesPerGuest: 3 }, defaults: defaults("lobby-time"),
   },
   {
@@ -68,6 +74,7 @@ export const starterPacks: readonly StarterPack[] = [
     description: "One AI presenter and five independent guests. The theme, presenter and final cast are still to be confirmed.",
     instructions: "", formatId: "general", expectedGuests: 5,
     editorialStatus: "awaiting-theme-and-cast", cast: [],
+    identity: { palette: "ocean", font: "poster", motif: "rings", label: "AI PRESENTER + FIVE GUESTS", tagline: "The next format is still taking shape.", artworkUrl: null },
     imagery: { query: "radio studio microphone", imagesPerGuest: 3 }, defaults: defaults("late-night-radio"),
   },
 ];
@@ -85,4 +92,5 @@ export function starterPackIssue(pack: StarterPack): string | null {
 export const starterPackMenu: StarterPackMenuItem[] = starterPacks.map((pack) => ({
   id: pack.id, mode: pack.mode, name: pack.name, description: pack.description,
   expectedGuests: pack.expectedGuests, unavailableReason: starterPackIssue(pack),
+  identity: { ...pack.identity }, guests: pack.cast.map((guest) => ({ name: `${guest.caller.firstName} ${guest.caller.surnameInitial ?? ""}`.trim(), personality: guest.preview ?? "Independent caller", headline: guest.caller.issueHeadline })),
 }));

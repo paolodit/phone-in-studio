@@ -3,6 +3,8 @@ import { starterPackIssue, starterPackMenu, starterPacks } from "@/lib/starter-p
 import { channelCreationModes, defaultChannelCreationMode } from "@/lib/channel-creation-options";
 import { readyTestPack } from "./fixtures/starter-pack";
 import { readBackgroundMusic } from "@/lib/background-music";
+import { callerFormSchema } from "@/lib/schemas";
+import { showIdentitySchema } from "@/lib/show-identity";
 
 describe("starter pack catalogue", () => {
   it("keeps the requested entry order and human-hosted default", () => {
@@ -11,7 +13,21 @@ describe("starter pack catalogue", () => {
     expect(starterPacks.filter((pack) => pack.mode === "human").map((pack) => pack.name)).toEqual(["Am I the A**hole?", "Who Booked These Guests?", "Bad Joke Hotline"]);
     expect(starterPacks.filter((pack) => pack.mode === "auto")).toHaveLength(1);
   });
-  it("reserves six independent guests for human packs, five for auto, without inventing final casts", () => {
+  it("ships eighteen complete, distinct human guests and keeps the auto theme pending", () => {
+    const human = starterPacks.filter((pack) => pack.mode === "human");
+    expect(human.every((pack) => pack.editorialStatus === "ready")).toBe(true);
+    const guests = human.flatMap((pack) => pack.cast);
+    expect(guests).toHaveLength(18); expect(new Set(guests.map((guest) => guest.id)).size).toBe(18);
+    for (const guest of guests) {
+      expect(callerFormSchema.safeParse(guest.caller).success, guest.id).toBe(true);
+      expect(guest.caller.hiddenTruth!.length).toBeGreaterThan(80);
+      expect(guest.caller.suggestedQuestions!.split("\n")).toHaveLength(3);
+      expect(guest.preview).toBeTruthy(); expect(guest.portrait.url).toMatch(/^data:image\/svg\+xml/);
+    }
+    for (const pack of human) { expect(new Set(pack.cast.map((guest) => guest.caller.voiceId)).size).toBe(6); expect(showIdentitySchema.safeParse(pack.identity).success).toBe(true); }
+    expect(starterPacks.find((pack) => pack.mode === "auto")?.editorialStatus).toBe("awaiting-theme-and-cast");
+  });
+  it("keeps counts and enabled media defaults consistent", () => {
     for (const pack of starterPacks) {
       expect(pack.expectedGuests).toBe(pack.mode === "human" ? 6 : 5);
       if (pack.editorialStatus === "ready") {
@@ -26,6 +42,8 @@ describe("starter pack catalogue", () => {
   });
   it("publishes only menu metadata, not private character material", () => {
     expect(starterPackMenu.every((item) => !Object.hasOwn(item, "cast") && !Object.hasOwn(item, "instructions"))).toBe(true);
+    expect(starterPackMenu[0].guests).toHaveLength(6);
+    for (const guest of starterPacks[0].cast) expect(JSON.stringify(starterPackMenu)).not.toContain(guest.caller.hiddenTruth);
   });
   it("won't release a pack with the wrong count, repeated guest ID or missing presenter", () => {
     const pack = readyTestPack(); expect(starterPackIssue(pack)).toBeNull();

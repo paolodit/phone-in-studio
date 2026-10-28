@@ -41,6 +41,10 @@ html:has(.broadcast-shell [data-mode="overlay"]), body:has(.broadcast-shell [dat
 .broadcast-stage[data-mode="overlay"] .broadcast-surface { background: transparent; }
 .broadcast-header { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 3cqw; }
 .broadcast-show-title { min-width: 0; }
+.broadcast-brand { display: flex; align-items: center; gap: 1.4cqw; min-width: 0; }
+.broadcast-brand-icon { width: clamp(24px, min(7cqw, 12cqh), 100px); height: clamp(24px, min(7cqw, 12cqh), 100px); border-radius: 16%; flex-shrink: 0; object-fit: cover; }
+.broadcast-idle-artwork { display: block; width: min(64cqw, 64cqh); max-height: 40cqh; object-fit: contain; margin: 0 auto 3cqh; border-radius: 2cqw; }
+.broadcast-idle:has(.broadcast-idle-artwork) h2 { font-size: clamp(20px, min(4cqw, 7cqh), 64px); margin: 2cqh auto; }
 .broadcast-show-title h1 { margin: .5cqh 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(14px, min(3.2cqw, 6cqh), 54px); font-weight: 800; letter-spacing: -.035em; line-height: 1.12; color: #fff; }
 .broadcast-eyebrow { font-size: clamp(7px, min(1cqw, 2cqh), 14px); font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: #67e8f9; }
 .broadcast-state { display: flex; flex-shrink: 0; align-items: center; gap: .5em; padding: .65em .9em; border-radius: 99px; background: #1e293be8; color: #e2e8f0; font-size: clamp(7px, min(1.05cqw, 2.3cqh), 16px); font-weight: 800; }
